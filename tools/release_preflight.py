@@ -21,6 +21,10 @@ REQUIRED_FILES = (
     Path("CLAUDE.md"),
     Path(".claude/settings.json"),
     Path(".claude/skills/onboard/SKILL.md"),
+    Path(".claude/skills/setup-paper/SKILL.md"),
+    Path(".claude/skills/new-project/SKILL.md"),
+    Path("boilerplate/template_main.tex"),
+    Path("boilerplate/template_references.bib"),
     Path("docs/ai/core.md"),
     Path("docs/ai/onboarding.md"),
     Path("docs/ai/wrds.md"),
@@ -76,6 +80,7 @@ SHARED_TEXT_FILES = (
     Path("packages/PyBondLab/AGENTS.md"),
     Path("tools/bootstrap.py"),
     Path("tools/onboard_probe.py"),
+    Path(".claude/skills/setup-paper/SKILL.md"),
 )
 
 REQUIRED_BOOTSTRAP_SNIPPETS = {
@@ -87,6 +92,8 @@ REQUIRED_BOOTSTRAP_SNIPPETS = {
     Path("tools/onboard_probe.py"): ("def collect_probe",),
     Path("tools/bootstrap.py"): ("audit", "repair", "apply", "collect_probe", "build_bootstrap_plan"),
     Path("tools/onboarding_smoke_test.py"): ("validate_packaging_layout", "bootstrap.py apply", "bootstrap_plan"),
+    Path(".claude/skills/setup-paper/SKILL.md"): ("boilerplate/template_main.tex", "[REMOVE]", "references.bib"),
+    Path(".claude/skills/new-project/SKILL.md"): ("/setup-paper",),
 }
 
 

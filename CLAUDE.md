@@ -82,6 +82,7 @@ Read these files before broad repo changes:
 
 ### Writing and LaTeX
 
+- `/setup-paper` - scaffold a new paper from `boilerplate/template_main.tex` with [REMOVE]-tagged exemplar content
 - `/write-section`
 - `/style-check`
 - `/proofread`
@@ -93,7 +94,7 @@ Read these files before broad repo changes:
 
 ### Project Management
 
-- `/new-project`
+- `/new-project` - creates project scaffold, then offers to run `/setup-paper`
 - `/create-skill`
 - `/rule-create`
 - `/create-audit-agent`

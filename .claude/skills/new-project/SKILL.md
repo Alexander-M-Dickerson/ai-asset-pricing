@@ -6,7 +6,7 @@ argument-hint: "<project_name> [optional description]"
 
 # Create New Research Project
 
-Three phases: **Validate → Gather Context → Create Scaffold**.
+Four phases: **Validate → Gather Context → Create Scaffold → Setup Paper**.
 
 ## Examples
 
@@ -191,9 +191,9 @@ __pycache__/
 Thumbs.db
 ```
 
-### 3e. Print summary
+### 3e. Print scaffold summary
 
-Print this to the user:
+Print the directory tree to the user:
 
 ```
 ## Project Created: {project_name}
@@ -212,11 +212,30 @@ projects/{project_name}/
   literature/
   guidance/
   _misc/
+```
 
+## Phase 4: Setup Paper
+
+After printing the scaffold summary, ask the user:
+
+> "Set up the LaTeX paper now? This copies the boilerplate template into `latex/` with your title and [REMOVE]-tagged exemplar content."
+
+Use `AskUserQuestion` with options:
+- **Yes** — proceed to set up the paper
+- **No** — skip; user can run `/setup-paper` later
+
+If **Yes**:
+1. Derive a default paper title from the project name (replace underscores with spaces, title case)
+2. Invoke `/setup-paper` with the derived title, targeting `projects/<name>/latex/`
+3. The user can provide `--authors` and `--topic` at this point if they want
+
+If **No**, print:
+
+```
 Next steps:
-  1. Add literature PDFs to literature/
-  2. Start an investigation: create scripts/tests/{test_name}/ with an output/ subfolder
-  3. Fetch data using WRDS agents — it saves to data/ and you reference it from here
-  4. Add methodology notes to guidance/
-  5. Begin your LaTeX writeup in latex/
+  1. Run /setup-paper "Your Title" to scaffold the LaTeX paper when ready
+  2. Add literature PDFs to literature/
+  3. Start an investigation: create scripts/tests/{test_name}/ with an output/ subfolder
+  4. Fetch data using WRDS agents — it saves to data/ and you reference it from here
+  5. Add methodology notes to guidance/
 ```
