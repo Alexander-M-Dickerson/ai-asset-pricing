@@ -513,19 +513,4 @@ Grep "@data-flow" PyBondLab/PyBondLab.py
 
 ## DETAILED REFERENCE
 
-For deeper documentation on specific features, see:
-
-| Topic | File |
-|-------|------|
-| SingleSort / DoubleSort | `docs/SingleSort_DoubleSort_README.md` |
-| WithinFirmSort | `docs/WithinFirmSort_README.md` |
-| Non-staggered rebalancing | `docs/NonStaggeredRebalancing_README.md` |
-| Batch processing | `docs/BatchStrategyFormation_README.md` |
-| Data uncertainty | `docs/DataUncertaintyAnalysis_README.md` |
-| Anomaly assaying | `docs/AnomalyAssay_README.md` |
-| Naming conventions | `docs/NamingConfig_README.md` |
-| Rolling betas | `docs/RollingBeta_README.md` |
-| Pre-analysis stats | `docs/PreAnalysisStats_README.md` |
-| API reference (all exports) | `docs/API_REFERENCE.md` |
-| Module map | `docs/MODULE_MAP.md` |
-| Optimization history | `docs/OPTIMIZATION_HISTORY.md` |
+For the full API surface, see `docs/API_REFERENCE.md`.

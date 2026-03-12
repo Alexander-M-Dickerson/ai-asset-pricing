@@ -2,10 +2,11 @@
 
 Portfolio sorting and strategy evaluation for corporate bonds.
 
-PyBondLab is bundled inside this repository under `packages/PyBondLab/`. The
-authoritative upstream repository is
+This is the maintained copy of PyBondLab for this repository. The original
+standalone package is at
 [GiulioRossetti94/PyBondLab](https://github.com/GiulioRossetti94/PyBondLab).
-This copy may include local patches; check git log for divergence.
+Bug reports and feature requests for this repo's copy should be filed in this
+repo's issue tracker.
 
 ## Install
 

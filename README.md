@@ -125,7 +125,7 @@ workflows require a [WRDS](https://wrds-www.wharton.upenn.edu/) account.
 - `fintools` package (rolling betas, panel lags) — pure Python, no data dependency
 - `PyBondLab` package install and import — the API is functional without data
 - LaTeX boilerplate and paper setup
-- The full test suite: `pytest tests/ -v`
+- Basic test suite: `pytest tests/ -v`
 
 **What requires WRDS access:**
 - Data extraction via `psql service=wrds` or SSH
