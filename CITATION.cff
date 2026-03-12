@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+title: "Empirical Finance with Claude Code and Codex"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Dickerson
+    given-names: Alex
+    email: alexander.dickerson1@unsw.edu.au
+    orcid: "https://orcid.org/0000-0002-8837-4387"
+    affiliation: "UNSW Business School"
+license: MIT
+repository-code: "https://github.com/alexdickerson/empirical-claude"
+keywords:
+  - empirical finance
+  - asset pricing
+  - corporate bonds
+  - WRDS
+  - factor construction
+  - PyBondLab

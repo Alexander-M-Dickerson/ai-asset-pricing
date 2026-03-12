@@ -334,13 +334,13 @@ def run_wrds_checks(probe: dict[str, Any], *, skip: bool) -> dict[str, Any]:
         "-At",
         "service=wrds",
         "-c",
-        "SELECT COUNT(*) FROM crsp.dsi WHERE date >= '2024-01-01';",
+        f"SELECT COUNT(*) FROM crsp.dsi WHERE date >= '{datetime.now().year - 1}-01-01';",
     ]
     rc, stdout, stderr = run_command(count_cmd, env=env, cwd=REPO_ROOT)
     try:
         row_count = int(stdout)
         count_ok = rc == 0 and row_count >= 1
-        detail = f"{row_count} rows visible in crsp.dsi since 2024-01-01"
+        detail = f"{row_count} rows visible in crsp.dsi since {datetime.now().year - 1}-01-01"
     except ValueError:
         count_ok = False
         detail = stderr or stdout or "COUNT query failed"
@@ -360,7 +360,7 @@ def run_wrds_checks(probe: dict[str, Any], *, skip: bool) -> dict[str, Any]:
         "-w",
         "service=wrds",
         "-c",
-        "COPY (SELECT date, sprtrn FROM crsp.dsi WHERE date >= '2024-12-01' ORDER BY date LIMIT 5) "
+        f"COPY (SELECT date, sprtrn FROM crsp.dsi WHERE date >= '{datetime.now().year - 1}-12-01' ORDER BY date LIMIT 5) "
         "TO STDOUT WITH CSV HEADER",
     ]
     rc, stdout, stderr = run_command(pipeline_cmd, env=env, cwd=REPO_ROOT)
