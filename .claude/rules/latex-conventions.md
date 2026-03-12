@@ -189,3 +189,44 @@ Figure~\ref{fig:returns}
 Section~\ref{sec:methodology}
 Eq.~\eqref{eq:main}
 ```
+
+## Compilation Gotchas
+
+- **`longtable` is LR mode** — you cannot use `\begin{spacing}`, `\begin{justify}`, `\begin{adjustwidth}`, or other paragraph-mode environments inside `longtable`. Place table notes AFTER `\end{longtable}`, not inside it.
+- **`tabular` inside `table` is fine** — but `longtable` replaces both `table` and `tabular`, so it has different nesting rules.
+- **`inputenc` encoding** — always use `\usepackage[utf8]{inputenc}`, NOT `utf8x` (loads `ucs.sty`, conflicts with modern packages) or `utf` (invalid, causes error). Modern LaTeX (2018+) defaults to UTF-8, making `inputenc` technically redundant but harmless.
+
+## Longtable
+
+`longtable` replaces both `\begin{table}` and `\begin{tabular}`. Do NOT wrap it in `\begin{table}`. Required structure:
+
+1. `\caption{...} \\` immediately after `\begin{longtable}{...}`
+2. Header rows + `\endfirsthead`
+3. Continuation header + `\endhead`
+4. Footer + `\endfoot`
+5. Final footer + `\endlastfoot`
+6. Data rows
+7. `\label{...}` before `\end{longtable}`
+8. Table notes go AFTER `\end{longtable}`, never inside it
+
+See `boilerplate/template_main.tex` for a working commented-out example.
+
+## Auto-Generated LaTeX from Data
+
+When writing data strings (company names, tickers, percentages) to `.tex` files, **escape LaTeX specials**:
+
+| Char | Escape | Common source |
+|------|--------|---------------|
+| `&` | `\&` | Company names (S&P), column headers |
+| `%` | `\%` | Percentage values in text |
+| `_` | `\_` | Variable names, tickers |
+| `#` | `\#` | Rare |
+| `$` | `\$` | Currency symbols |
+
+Python helper:
+```python
+def latex_escape(s: str) -> str:
+    for ch, esc in [('&', r'\&'), ('%', r'\%'), ('_', r'\_'), ('#', r'\#'), ('$', r'\$')]:
+        s = s.replace(ch, esc)
+    return s
+```

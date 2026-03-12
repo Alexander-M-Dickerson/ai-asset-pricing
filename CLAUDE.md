@@ -110,6 +110,7 @@ Read these files before broad repo changes:
 
 ### Project Management
 
+- `/idea` - adversarial research idea generator: literature survey, WRDS feasibility, research plan
 - `/new-project` - creates project scaffold, then offers to run `/setup-paper`
 - `/create-skill`
 - `/rule-create`

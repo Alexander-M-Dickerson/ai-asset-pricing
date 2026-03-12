@@ -31,6 +31,21 @@ These files are machine-local and must never be committed:
 Research projects should live under `projects/<name>/` with production code,
 tests/investigations, results, and writing artifacts separated cleanly.
 
+## Project Context Folder
+
+Projects may include `projects/<name>/context/` for operational learnings
+that persist across sessions (data pull gotchas, session notes, what broke).
+This is distinct from `guidance/` (paper context, literature) and
+`.claude/rules/` (repo-wide conventions). Read `context/session_learnings.md`
+at the start of every session if it exists.
+
+## Parallel Bash Behavior
+
+When Claude Code runs multiple Bash calls in parallel, if one call fails,
+all remaining parallel calls in the same batch are automatically cancelled.
+Their output is lost. Never run exploratory or untested queries in parallel —
+only parallelize operations known to succeed.
+
 ## Shared Conventions
 
 - Prefer Parquet plus `metadata.json` for extracted datasets.

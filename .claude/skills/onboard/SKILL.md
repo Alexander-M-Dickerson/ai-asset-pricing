@@ -130,6 +130,18 @@ If WRDS files are missing, create or repair:
 Use the username from `$ARGUMENTS` if provided, otherwise ask once. If
 `~/.pgpass` is missing, ask for the WRDS password and do not echo it back.
 
+> **DUO 2FA:** The first `psql service=wrds` connection from a new IP triggers
+> a DUO push notification. **Tell the user to check their phone** and approve it.
+> The connection will time out (~60s) if not approved. This is the #1 cause of
+> "connection timed out" on first setup.
+
+When testing WRDS connectivity, use a date range guaranteed to have data (e.g., 2022).
+Do NOT use the current year — WRDS data loading can lag by months. A query returning
+0 rows is NOT a valid connectivity confirmation.
+
+Example: `psql service=wrds -c "SELECT COUNT(*) FROM crsp.dsi WHERE date >= '2022-01-01' AND date < '2023-01-01';"`
+Expected: ~251 rows (trading days in 2022).
+
 `~/.pg_service.conf`
 
 ```ini

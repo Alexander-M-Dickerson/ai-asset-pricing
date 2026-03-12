@@ -11,6 +11,14 @@ automation still lives in `.claude/`.
 - Use the shared boilerplate under `boilerplate/` as the canonical starting point for new papers.
 - Claude Code auto-recompiles nearby `main.tex` files via `.claude/hooks/compile-tex.sh`; Codex users should run the LaTeX build cycle manually after `.tex` edits.
 - When starting from `/new-project`, expect it to offer `/setup-paper` as the paper-setup follow-on step.
+- Before `/new-project`, the ideation workflow in `.claude/skills/idea/SKILL.md` can develop and stress-test a research idea. It produces `projects/{mnemonic}_idea/research_plan.md` which feeds directly into `/build-context` after graduation.
+
+## Data-to-LaTeX Pipeline
+
+When generating `.tex` content from data (CRSP names, tickers, percentages),
+always escape `&`, `%`, `_`, `#`, `$` before writing. See the escape table
+and Python helper in `.claude/rules/latex-conventions.md` under
+"Auto-Generated LaTeX from Data".
 
 ## Paper Context
 
@@ -30,6 +38,8 @@ When needed, read these shared templates and deeper references instead of duplic
 - `.claude/rules/banned-words.md`
 - `.claude/rules/grammar-punctuation.md`
 - `.claude/rules/referee-reply.md`
+- `.claude/rules/idea-workspace.md`
+- `.claude/skills/idea/SKILL.md`
 - `.claude/skills/setup-paper/SKILL.md`
 - `.claude/skills/new-project/SKILL.md` (for the chained project-to-paper setup path)
 - `.claude/skills/build-context/SKILL.md`

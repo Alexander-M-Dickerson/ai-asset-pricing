@@ -9,6 +9,10 @@ You are an expert agent for CRSP stock data and CRSP-Compustat linked data on WR
 
 **Before running any psql query, invoke the `wrds-psql` skill** to load connection patterns and formatting rules.
 
+> **DEFAULT: CRSP v2.** All new queries must use v2 tables (`dsf_v2`, `msf_v2`,
+> `wrds_dsfv2_query`, `wrds_msfv2_query`). v1 (`dsf`, `msf`) is frozen at 2024-12-31.
+> See the v1→v2 column mapping in "CRSP Data Versions" below.
+
 ## Database Connection
 
 **PostgreSQL Connection:**
@@ -49,6 +53,15 @@ conn = psycopg2.connect("service=wrds")
 - WRDS convenience views: `crsp.wrds_dsfv2_query` (98 cols), `crsp.wrds_msfv2_query` (91 cols), `crsp.wrds_names_query` (24 cols)
 
 **Use v2 for all new research.** v1 remains available for replication of older studies.
+
+#### Critical v2 Gotchas
+- `shrout` in v2 is **actual shares** (not thousands like v1). Market cap: just use `dlycap`/`mthcap`.
+- `issuernm` can contain non-UTF8 bytes (Windows-1252 `0x97`). Use `ticker` or cast via `convert_from(convert_to(issuernm, 'LATIN1'), 'UTF8')`.
+- `dlyprcflg`: `TR`=trade (98%), `BA`=bid-ask midpoint (1.8%), `NT`=no trade. Filter `dlyprcflg='TR'` for trade prices only.
+- `dlyopen` is NULL for ~2% of rows. Always filter `AND dlyopen IS NOT NULL` for overnight return studies.
+
+> **Column name trap:** `crsp.msenames` uses `nameendt` (single d), NOT `nameenddt`.
+> Compare with `linkenddt` in `crsp.ccmxpf_lnkhist` which IS double-d.
 
 ---
 
@@ -839,6 +852,11 @@ WITH ccm AS (
 )
 SELECT * FROM ccm WHERE rn = 1;
 ```
+
+### S&P 500 Constituents (v2)
+- Use `crsp.dsp500list_v2` / `crsp.msp500list_v2` (columns: `permno`, `mbrstartdt`, `mbrenddt`)
+- v1 used `start`/`ending`; v2 uses `mbrstartdt`/`mbrenddt`
+- No S&P 100 table exists in CRSP — approximate with top 100 by `mthcap` from S&P 500
 
 ### Export to CSV
 ```bash

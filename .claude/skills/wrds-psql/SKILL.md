@@ -8,11 +8,26 @@ argument-hint: "[query or description of data needed]"
 
 Execute WRDS queries directly from the local machine using `psql` with service file authentication. No SSH required.
 
+## CRSP Version Policy
+
+**All CRSP queries MUST use v2 tables:**
+- `crsp.dsf_v2` / `crsp.wrds_dsfv2_query` (daily) — NOT `crsp.dsf`
+- `crsp.msf_v2` / `crsp.wrds_msfv2_query` (monthly) — NOT `crsp.msf`
+
+v1 is frozen at 2024-12-31. v2 is updated through 2025-12-31+.
+
+v2 eliminates three common v1 error patterns:
+1. No `abs(prc)` — prices are always positive (`dlyprcflg` flags bid/ask midpoint)
+2. No `msenames` join — ticker, issuer name, exchange are columns in the v2 views
+3. No delisting merge — `dlyret`/`mthret` already include delisting returns
+
+For the full column mapping see `.claude/agents/crsp-wrds-expert.md`.
+
 ## Examples
 
 - `/wrds-psql` -- interactive guidance for building a query
 - `/wrds-psql "daily returns for AAPL in 2024"` -- natural language query description
-- `/wrds-psql "SELECT permno, date, ret FROM crsp.dsf WHERE permno=14593"` -- direct SQL
+- `/wrds-psql "SELECT permno, dlycaldt, dlyret FROM crsp.dsf_v2 WHERE permno=14593"` -- direct SQL
 
 ## Critical Rule: Single-Line Commands Only
 
@@ -20,12 +35,12 @@ Execute WRDS queries directly from the local machine using `psql` with service f
 
 ```bash
 # GOOD — single line
-psql service=wrds -c "SELECT permno, date, ret FROM crsp.dsf WHERE permno = 84398 LIMIT 10;"
+psql service=wrds -c "SELECT permno, dlycaldt, dlyret FROM crsp.dsf_v2 WHERE permno = 84398 LIMIT 10;"
 
 # BAD — multi-line
 psql service=wrds \
-    -c "SELECT permno, date, ret
-        FROM crsp.dsf
+    -c "SELECT permno, dlycaldt, dlyret
+        FROM crsp.dsf_v2
         WHERE permno = 84398 LIMIT 10;"
 ```
 
@@ -38,11 +53,33 @@ psql service=wrds -f query.sql
 
 Connection details are in `~/.pg_service.conf` (host, port, database, user); password in `~/.pgpass`.
 
+### Windows
+
+On Windows, `PGSERVICEFILE=... psql` shell syntax does not work. In Python, pass environment variables via `subprocess.run(..., env={...})`:
+
+```python
+import os, subprocess
+env = os.environ.copy()
+env['PGSERVICEFILE'] = os.path.expandvars(r'$APPDATA\postgresql\pg_service.conf')
+result = subprocess.run(
+    ['psql', '-X', '-w', 'service=wrds', '-c', sql],
+    capture_output=True, text=True, timeout=300, env=env,
+)
+```
+
+In Bash, export first: `export PGSERVICEFILE="$APPDATA/postgresql/pg_service.conf" && psql service=wrds ...`
+
+Check `LOCAL_ENV.md` for exact paths on this machine.
+
+### DUO Two-Factor Authentication
+
+WRDS requires DUO 2FA. The first `psql` connection of a session triggers a push notification — **tell the user to check their phone and approve it**. The connection hangs (up to 60s) until approved. Subsequent connections from the same IP are cached (~24 hours). If the connection times out, DUO is almost always the reason — retry once before diagnosing further.
+
 ## Query Patterns
 
 ### Inline query
 ```bash
-psql service=wrds -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='crsp' AND table_name='dsf' ORDER BY ordinal_position;"
+psql service=wrds -c "SELECT column_name, data_type FROM information_schema.columns WHERE table_schema='crsp' AND table_name='dsf_v2' ORDER BY ordinal_position;"
 ```
 
 ### Query from file (preferred for complex SQL)
@@ -52,7 +89,7 @@ psql service=wrds -f query.sql
 
 ### Tuples-only output (no headers/footers)
 ```bash
-psql service=wrds -t -A -F',' -c "SELECT permno, date, ret FROM crsp.dsf WHERE permno=84398 LIMIT 10"
+psql service=wrds -t -A -F',' -c "SELECT permno, dlycaldt, dlyret FROM crsp.dsf_v2 WHERE permno=84398 LIMIT 10"
 ```
 Flags: `-t` (tuples only), `-A` (unaligned), `-F','` (comma field separator).
 
@@ -65,7 +102,7 @@ Flags: `-t` (tuples only), `-A` (unaligned), `-F','` (comma field separator).
 This is a single pipeline. Do NOT save intermediate CSV files.
 
 ```bash
-psql service=wrds -c "COPY (SELECT permno, date, ret, prc FROM crsp.dsf WHERE permno = 84398 AND date >= '2024-01-01' ORDER BY date) TO STDOUT WITH CSV HEADER" | python -c "
+psql service=wrds -c "COPY (SELECT permno, dlycaldt, dlyret, dlyprc FROM crsp.dsf_v2 WHERE permno = 84398 AND dlycaldt >= '2024-01-01' ORDER BY dlycaldt) TO STDOUT WITH CSV HEADER" | python -c "
 import sys, json, pandas as pd
 from datetime import datetime, timezone
 
@@ -84,9 +121,9 @@ df.to_parquet(f'{outdir}/data.parquet', index=False, compression='snappy')
 # Save metadata
 meta = {
     'description': 'SPY daily returns and prices',  # ← set per query
-    'sql': 'SELECT permno, date, ret, prc FROM crsp.dsf WHERE permno = 84398 AND date >= 2024-01-01 ORDER BY date',
+    'sql': 'SELECT permno, dlycaldt, dlyret, dlyprc FROM crsp.dsf_v2 WHERE permno = 84398 AND dlycaldt >= 2024-01-01 ORDER BY dlycaldt',
     'database': 'crsp',
-    'tables': ['crsp.dsf'],
+    'tables': ['crsp.dsf_v2'],
     'columns': list(df.columns),
     'n_obs': len(df),
     'date_range': [str(df[next(c for c in df.columns if c in ('date','datadate','dlycaldt','mthcaldt'))].min().date()), str(df[next(c for c in df.columns if c in ('date','datadate','dlycaldt','mthcaldt'))].max().date())] if any(c in df.columns for c in ('date','datadate','dlycaldt','mthcaldt')) else None,
@@ -111,7 +148,7 @@ print(f'Saved {len(df)} rows to {outdir}/data.parquet')
 
 ### CSV export (only when user explicitly asks)
 ```bash
-psql service=wrds -c "COPY (SELECT ...) TO STDOUT WITH CSV HEADER" > output.csv
+mkdir -p output_dir && psql service=wrds -c "COPY (SELECT ...) TO STDOUT WITH CSV HEADER" > output_dir/output.csv
 ```
 
 ## Schema Discovery
@@ -119,19 +156,19 @@ psql service=wrds -c "COPY (SELECT ...) TO STDOUT WITH CSV HEADER" > output.csv
 ```bash
 psql service=wrds -c "\dn" | head -40
 psql service=wrds -c "\dt crsp.*"
-psql service=wrds -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema='crsp' AND table_name='dsf' ORDER BY ordinal_position;"
-psql service=wrds -c "SELECT COUNT(*), MIN(date), MAX(date) FROM crsp.dsf;"
+psql service=wrds -c "SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema='crsp' AND table_name='dsf_v2' ORDER BY ordinal_position;"
+psql service=wrds -c "SELECT COUNT(*), MIN(dlycaldt), MAX(dlycaldt) FROM crsp.dsf_v2;"
 ```
 
 ## Common Databases and Key Tables
 
 | Schema | Table | Description | Key Columns |
 |--------|-------|-------------|-------------|
-| `crsp` | `dsf` | Daily stock file | permno, date, ret, prc, vol, shrout |
+| `crsp` | `dsf_v2` | Daily stock file (v2) | permno, dlycaldt, dlyret, dlyprc, dlyvol, dlycap, shrout |
 | `crsp` | `dsi` | Daily S&P index | date, sprtrn, spindx, vwretd |
-| `crsp` | `msf` | Monthly stock file | permno, date, ret, prc |
-| `crsp` | `stocknames` | Security names/identifiers | permno, namedt, nameendt, ticker, cusip |
-| `crsp` | `delist` | Delisting events | permno, dlstdt, dlret, dlstcd |
+| `crsp` | `msf_v2` | Monthly stock file (v2) | permno, mthcaldt, mthret, mthprc, mthcap |
+| `crsp` | `stksecurityinfohist` | Security info (v2) | permno, secinfostartdt, secinfoenddt, ticker, cusip |
+| `crsp` | `stkdelists` | Delisting events (v2) | permno, dlstdt; rarely needed — v2 returns include delisting |
 | `optionm` | `opprcd{YYYY}` | Option prices (yearly) | secid, date, exdate, cp_flag, strike_price(/1000!), best_bid, best_offer, impl_volatility, delta |
 | `optionm` | `securd` | Security reference | secid, ticker, cusip, index_flag |
 | `optionm` | `stdopd` | Standardized options | secid, date, days, impl_volatility, delta |
@@ -148,13 +185,12 @@ psql service=wrds -c "SELECT COUNT(*), MIN(date), MAX(date) FROM crsp.dsf;"
 
 1. **OptionMetrics strike_price** — stored as strike * 1000. Always `strike_price / 1000.0` in queries.
 2. **OptionMetrics yearly tables** — option prices are partitioned by year: `optionm.opprcd1996`, `optionm.opprcd1997`, ..., `optionm.opprcd2025`. Use `UNION ALL` across years or query one at a time.
-3. **CRSP column names** — `crsp.dsi` uses `date` (not `caldt`), `spindx` (not `sprindx`).
+3. **CRSP column names** — `crsp.dsi` uses `date` (not `caldt`), `spindx` (not `sprindx`). v2 daily uses `dly` prefix (`dlycaldt`, `dlyret`, `dlyprc`); monthly uses `mth` prefix (`mthcaldt`, `mthret`). Do NOT use v1 names (`date`, `ret`, `prc`) with v2 tables — they produce hard errors, and PostgreSQL HINTs may suggest wrong columns (e.g., `disfacpr` instead of the correct `dlycumfacpr`).
 4. **Numeric precision** — PostgreSQL returns `numeric` type for many WRDS columns. When loading into Python, cast to `float64`.
-5. **Large queries** — WRDS may timeout on queries returning millions of rows. Break into date ranges:
-   ```sql
-   -- Instead of: SELECT * FROM crsp.dsf WHERE permno IN (...)
-   -- Do: SELECT * FROM crsp.dsf WHERE date >= '2020-01-01' AND date < '2021-01-01' AND permno IN (...)
-   ```
+5. **Large queries — always chunk** — WRDS may timeout on queries returning millions of rows.
+   - Break by date ranges (1-year windows): `WHERE dlycaldt >= '2020-01-01' AND dlycaldt < '2021-01-01'`
+   - Or batch by ~50 PERMNOs per query for cross-sectional pulls
+   - Save intermediate chunks for resume-friendliness: `if os.path.exists(chunk_file): continue`
 6. **COPY vs SELECT** — `COPY ... TO STDOUT` is much faster than piping `SELECT` output for large extractions.
 7. **NULL handling** — many columns have NULLs (missing returns, missing prices). Always consider `WHERE ret IS NOT NULL` or handle in downstream code.
 8. **SPY identifiers** — CRSP PERMNO: 84398. OptionMetrics SECID: 109820. SPX SECID: 108105.
@@ -169,6 +205,9 @@ psql service=wrds -c "SELECT COUNT(*), MIN(date), MAX(date) FROM crsp.dsf;"
 17. **Dickerson daily bond column names differ from monthly** — daily uses `cusip_id` (not `cusip`), `trd_exctn_dt` (not `date`), `credit_spread` (not `cs`), `mod_dur` (not `md_dur`), `spc_rating` (not `spc_rat`). Always check which table you're querying.
 18. **Dickerson daily bonds: sparse panel** — bonds only appear on days they trade. ~30M rows total. Return computation requires LAG() over consecutive trading days. Always filter `trd_exctn_dt`.
 19. **Dickerson daily bonds: no issuer_cusip** — daily table lacks `issuer_cusip`. Join to monthly table (`d.cusip_id = m.cusip AND DATE_TRUNC('month', d.trd_exctn_dt) = DATE_TRUNC('month', m.date)`) for issuer-level grouping.
+20. **First-call timeout** — the first `psql` call in a session often triggers DUO 2FA and hangs 30-60s. Do not kill it — accept the push. Retry once before diagnosing.
+21. **CRSP `nameendt` spelling** — `crsp.msenames` uses `nameendt` (single d), NOT `nameenddt`. Compare with `linkenddt` in `ccmxpf_lnkhist` which IS double-d. This is the #1 CRSP column-name typo. (v2 note: this table is rarely needed — v2 views embed security info directly.)
+22. **WRDS data lag** — CRSP, Compustat, and other WRDS databases lag months behind the current date. Never use the current year in smoke tests or data validation. Use a historical year (e.g., 2022) guaranteed to be fully populated.
 
 ## Best Practices
 
@@ -178,15 +217,17 @@ psql service=wrds -c "SELECT COUNT(*), MIN(date), MAX(date) FROM crsp.dsf;"
 4. **Default to Parquet** — always save as `.parquet` (snappy compression) with `metadata.json`. Never save CSV unless the user explicitly asks.
 5. **Avoid SELECT *** — specify only the columns you need to reduce data transfer.
 6. **Use CTEs for complex joins** — break multi-table queries into `WITH` clauses for readability and to help the query planner.
+7. **Never run exploratory queries in parallel** — if one query in a parallel Bash batch fails, Claude Code cancels ALL remaining queries. You lose their results and must re-run individually. Only parallelize queries known to succeed (e.g., different date ranges of a validated query). Run schema-discovery and column-testing queries sequentially.
+8. **Always mkdir before writing** — before any file write (`>`, `to_parquet`, `to_csv`), run `mkdir -p <dir>` or `os.makedirs(dir, exist_ok=True)`. Never assume a directory exists.
 
 ## Putting It Together: Full Extraction Workflow
 
 ```bash
 # 1. Test the query
-psql service=wrds -c "SELECT permno, date, ret, prc FROM crsp.dsf WHERE permno = 84398 AND date >= '2024-01-01' ORDER BY date LIMIT 10;"
+psql service=wrds -c "SELECT permno, dlycaldt, dlyret, dlyprc FROM crsp.dsf_v2 WHERE permno = 84398 AND dlycaldt >= '2024-01-01' ORDER BY dlycaldt LIMIT 10;"
 
 # 2. Extract → Parquet + metadata (single pipeline, no intermediate CSV)
-psql service=wrds -c "COPY (SELECT permno, date, ret, prc FROM crsp.dsf WHERE permno = 84398 AND date >= '2024-01-01' ORDER BY date) TO STDOUT WITH CSV HEADER" | python -c "
+psql service=wrds -c "COPY (SELECT permno, dlycaldt, dlyret, dlyprc FROM crsp.dsf_v2 WHERE permno = 84398 AND dlycaldt >= '2024-01-01' ORDER BY dlycaldt) TO STDOUT WITH CSV HEADER" | python -c "
 import sys, json, os, pandas as pd
 from datetime import datetime, timezone
 df = pd.read_csv(sys.stdin)
@@ -199,8 +240,8 @@ df.to_parquet(f'{outdir}/data.parquet', index=False, compression='snappy')
 date_cols = [c for c in df.columns if c in ('date','datadate','dlycaldt','mthcaldt')]
 meta = {
     'description': 'SPY daily returns and prices, 2024+',
-    'sql': 'SELECT permno, date, ret, prc FROM crsp.dsf WHERE permno = 84398 AND date >= 2024-01-01 ORDER BY date',
-    'database': 'crsp', 'tables': ['crsp.dsf'],
+    'sql': 'SELECT permno, dlycaldt, dlyret, dlyprc FROM crsp.dsf_v2 WHERE permno = 84398 AND dlycaldt >= 2024-01-01 ORDER BY dlycaldt',
+    'database': 'crsp', 'tables': ['crsp.dsf_v2'],
     'columns': list(df.columns), 'n_obs': len(df),
     'date_range': [str(df[date_cols[0]].min().date()), str(df[date_cols[0]].max().date())] if date_cols else None,
     'fetched_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),

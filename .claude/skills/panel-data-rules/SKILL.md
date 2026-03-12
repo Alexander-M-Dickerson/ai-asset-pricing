@@ -23,11 +23,11 @@ df.drop(columns=["_date_shifted"], inplace=True)
 
 | Source | shift(1) max gap | shift(1) min gap | Notes |
 |--------|------------------|------------------|-------|
-| CRSP `msf` (month-end normalized) | 31 days | 28 days | 2.26M obs: max gap = 31 days exactly |
-| CRSP `msf` (raw trading dates) | 33 days | 28 days | Raw dates vary by last trading day |
+| CRSP `msf`/`msf_v2` (month-end normalized) | 31 days | 28 days | 2.26M obs: max gap = 31 days exactly (v2: `mthcaldt`) |
+| CRSP `msf`/`msf_v2` (raw trading dates) | 33 days | 28 days | Raw dates vary by last trading day |
 | Compustat `fundq` | 100 days | 80 days | 99.89% in [90,92]; >100 = missing quarter |
 | Compustat `funda` | 380 days | 350 days | <350 = FYE change (correctly flagged) |
-| CRSP `dsf` | 5 days | 0 days | Weekends/holidays |
+| CRSP `dsf`/`dsf_v2` | 5 days | 0 days | Weekends/holidays (v2: `dlycaldt`) |
 
 For shift(k): `max_gap = k * single_max`, `min_gap = k * single_min`.
 
@@ -87,6 +87,12 @@ Never apply filters by default. Present options:
 - EXCHCD in (1,2,3) — NYSE, AMEX, NASDAQ
 - SIC 6000-6999 — financials
 - BE > 0, price/mcap minimums
+
+v2 equivalents (string codes):
+- Common stock: `sharetype='NS' AND securitytype='EQTY' AND securitysubtype='COM'`
+- US incorporated: `usincflg='Y'`
+- Major exchanges: `primaryexch IN ('N','A','Q')`
+- Active: `tradingstatusflg='A'`
 
 ## Rule 5: Missing Values (Compustat-Specific)
 

@@ -2,7 +2,7 @@
 \usepackage{tikz}
 \usetikzlibrary{shapes}
 
-\usepackage[utf8x]{inputenc}
+\usepackage[utf8]{inputenc}
 \usepackage{amsmath,amsfonts,amssymb,amsthm,mathrsfs,graphicx,
 	setspace,lscape,longtable,multirow,chngcntr,
 	color,bm,booktabs,float,enumitem,
@@ -496,6 +496,24 @@ All & 60 & 68\% & 1.62 & 3.56 \\
 \end{tabular}
 \end{center}
 \end{table}
+
+%%% [REMOVE] Longtable example — delete when writing your paper
+% \begin{longtable}{l p{10cm}}
+% \caption{\textbf{Variable definitions.}}\label{tab:vardefs}\\
+% \toprule Variable & Definition \\ \midrule
+% \endfirsthead
+% \multicolumn{2}{c}{\footnotesize\emph{Table~\thetable{} continued}} \\
+% \toprule Variable & Definition \\ \midrule
+% \endhead
+% \midrule \multicolumn{2}{r}{\footnotesize\emph{Continued on next page}} \\
+% \endfoot
+% \bottomrule
+% \endlastfoot
+% HML & High minus low book-to-market portfolio return \\
+% SMB & Small minus big size portfolio return \\
+% \end{longtable}
+% {\footnotesize Notes go here --- OUTSIDE longtable. Do not use
+% \texttt{\textbackslash begin\{spacing\}} inside longtable.}
 
 %% END:appendix-a
 

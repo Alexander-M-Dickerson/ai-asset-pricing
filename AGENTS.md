@@ -27,10 +27,17 @@ should live in `docs/ai/`.
   - Use `LOCAL_ENV.md` if present
 - WRDS, data extraction, or query pipelines:
   - Read `docs/ai/wrds.md`
+  - CRSP v2 is the default for all new work — see `docs/ai/wrds.md` "CRSP Version Policy"
   - Then read the relevant `.claude/agents/*.md` file for deep domain detail
 - PyBondLab package work:
   - Read `docs/ai/pybondlab.md`
   - Then read `packages/PyBondLab/AGENTS.md`
+- Research ideation, brainstorming, or developing new paper ideas:
+  - Read `.claude/skills/idea/SKILL.md`
+  - The skill creates lightweight `projects/{mnemonic}_idea/` workspaces with `musings.md` (adversarial dialogue log), `literature.md` (verified references), and `research_plan.md` (evolvable paper skeleton)
+  - Conventions for `*_idea/` folders are in `.claude/rules/idea-workspace.md`
+  - When an idea graduates to a full project, use `docs/ai/onboarding.md` patterns to create the `projects/{mnemonic}/` scaffold via `/new-project`
+  - The `research_plan.md` output is designed to feed into `.claude/skills/build-context/SKILL.md` and `.claude/skills/write-section/SKILL.md` downstream
 - Writing, LaTeX, referee responses, or decks:
   - Read `docs/ai/writing.md`
   - For new papers, start from `boilerplate/template_main.tex` and `boilerplate/template_references.bib`

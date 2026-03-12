@@ -194,3 +194,4 @@ fig.savefig('figure.png', bbox_inches='tight', dpi=150)
 - Add chartjunk: unnecessary gridlines, borders, background colors
 - Scale figures in LaTeX/Word — set correct size in matplotlib, include at 100%
 - Use different fonts/sizes across figures in the same paper
+- Use LaTeX escapes (`\&`, `\%`, `\_`) in matplotlib text (titles, labels, annotations) — matplotlib's default text engine renders backslashes literally. Write plain `S&P 500`, not `S\&P 500`. LaTeX escapes only work when `plt.rcParams['text.usetex'] = True`, which requires a full LaTeX installation and is NOT enabled by default in our style.
