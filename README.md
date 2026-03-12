@@ -121,3 +121,7 @@ Before pushing shared changes, run:
 ```
 
 This should fail if the repo still contains local files, generated caches, onboarding drift, or a broken temp-clone onboarding smoke test.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

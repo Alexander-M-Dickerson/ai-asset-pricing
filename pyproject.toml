@@ -6,7 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "fintools"
 version = "0.1.0"
 description = "Shared utilities for empirical asset pricing research"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.9"
+authors = [
+    {name = "Alex Dickerson", email = "alexander.dickerson1@unsw.edu.au"},
+]
+keywords = ["empirical finance", "asset pricing", "WRDS", "corporate bonds", "factor construction"]
 dependencies = [
     "pandas>=1.5",
     "psycopg2-binary>=2.9",

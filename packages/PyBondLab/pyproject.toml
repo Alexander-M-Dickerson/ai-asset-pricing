@@ -1,3 +1,55 @@
 [build-system]
 requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "PyBondLab"
+version = "0.2.0"
+description = "Portfolio sorting and strategy evaluation for corporate bonds"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Giulio Rossetti", email = "Giulio.Rossetti.1@wbs.ac.uk"},
+    {name = "Alex Dickerson", email = "alexander.dickerson1@unsw.edu.au"},
+]
+keywords = ["corporate bonds", "portfolio sorting", "asset pricing"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "numpy",
+    "pandas>=1.5",
+    "statsmodels>=0.14",
+    "matplotlib>=3.5",
+    "scipy>=1.10",
+    "pyarrow>=10.0",
+]
+
+[project.optional-dependencies]
+wrds = ["wrds"]
+performance = ["numba>=0.57"]
+all = ["wrds", "numba>=0.57"]
+
+[project.urls]
+Homepage = "https://openbondassetpricing.com/"
+Repository = "https://github.com/GiulioRossetti94/PyBondLab"
+Issues = "https://github.com/GiulioRossetti94/PyBondLab/issues"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["PyBondLab", "PyBondLab.*"]
+
+[tool.setuptools.package-data]
+PyBondLab = ["data/WRDS/*.csv"]
