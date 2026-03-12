@@ -32,3 +32,9 @@ jobs:
 
       - name: Run onboarding smoke test
         run: python tools/onboarding_smoke_test.py
+
+      - name: Lint with ruff
+        run: pip install ruff && ruff check .
+
+      - name: Run tests
+        run: pip install pytest && pytest tests/ -v

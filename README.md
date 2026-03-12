@@ -115,6 +115,26 @@ chmod 600 ~/.pgpass
 
 For deeper domain references, both tools can reuse the existing `.claude/agents/*.md`, `.claude/skills/*.md`, and `.claude/rules/*.md` files.
 
+## Data and Reproducibility
+
+This repo is designed for AI-assisted empirical finance research. Most data
+workflows require a [WRDS](https://wrds-www.wharton.upenn.edu/) account.
+
+**What works without WRDS:**
+- All AI skills, rules, and agents (writing, auditing, LaTeX, project scaffolding)
+- `fintools` package (rolling betas, panel lags) — pure Python, no data dependency
+- `PyBondLab` package install and import — the API is functional without data
+- LaTeX boilerplate and paper setup
+- The full test suite: `pytest tests/ -v`
+
+**What requires WRDS access:**
+- Data extraction via `psql service=wrds` or SSH
+- Running PyBondLab portfolio sorts on real bond data
+- WRDS connectivity checks during `/onboard`
+
+Extracted datasets are saved locally under `data/` as Parquet plus
+`metadata.json` and are never committed.
+
 ## Maintainer Preflight
 
 Before pushing shared changes, run:
