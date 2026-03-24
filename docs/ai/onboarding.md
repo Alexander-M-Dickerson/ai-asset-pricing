@@ -75,3 +75,26 @@ agent runtime to request any needed approvals for package installation.
 - If the repo lives in Dropbox/OneDrive, keep canonical local state external and avoid repo-root compatibility shims unless the working copy is private to one machine.
 - Dropbox/OneDrive are supported sync layers, not a substitute for Git merge/conflict handling on the same tracked code/config files.
 - If WRDS access is missing, record the missing pieces explicitly but treat onboarding as complete. WRDS is optional — only needed for data extraction workflows.
+
+## Claude Code Permissions and `settings.local.json`
+
+Claude Code may auto-create `.claude/settings.local.json` in the repo root when
+a user clicks "always allow" on a permission prompt. This is upstream Claude Code
+behavior, not controlled by bootstrap. Key facts:
+
+- Claude Code's overwrite bug (GitHub issues #9234, #9814, #9875) replaces the
+  entire `permissions.allow` array on each approval, so machine-specific entries
+  placed there get wiped.
+- The shared `.claude/settings.json` already has generic globs (`*/python*`,
+  `*/psql*`) that cover all common tool paths across machines.
+- Bootstrap no longer writes machine-specific Bash entries to
+  `settings.local.json`. It writes only a minimal structure to the canonical
+  external path.
+- If `.claude/settings.local.json` appears in the repo root with user-specific
+  paths, it is safe to delete. It is `.gitignore`-d and will not propagate via
+  Git. However, OneDrive and Dropbox sync ignore `.gitignore`, so the file may
+  propagate via cloud sync.
+- OneDrive has no file-level exclusion mechanism (no `.driveignore`). The only
+  defense against synced local files is architectural elimination: keep all
+  important permissions in the shared `settings.json` so the auto-created local
+  file is inconsequential.

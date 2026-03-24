@@ -7,12 +7,19 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 sys.dont_write_bytecode = True
+
+try:
+    from tools.bootstrap import cleanup_generated_repo_artifacts
+except ImportError:  # pragma: no cover - script execution path
+    from bootstrap import cleanup_generated_repo_artifacts
 
 
 REQUIRED_FILES = (
@@ -33,7 +40,14 @@ REQUIRED_FILES = (
     Path("docs/ai/writing.md"),
     Path("packages/PyBondLab/AGENTS.md"),
     Path("packages/PyBondLab/pyproject.toml"),
+    Path("packages/PyBondLab/PyBondLab/data/__init__.py"),
+    Path("packages/PyBondLab/PyBondLab/data/data_loading.py"),
+    Path("packages/PyBondLab/PyBondLab/data/WRDS/__init__.py"),
+    Path("packages/PyBondLab/PyBondLab/data/WRDS/breakpoints_wrds.csv"),
+    Path("CONTRIBUTING.md"),
     Path("tools/bootstrap.py"),
+    Path("tools/context_drift.py"),
+    Path("tools/local_state.py"),
     Path("tools/onboarding_smoke_test.py"),
     Path("tools/onboard_probe.py"),
 )
@@ -53,10 +67,17 @@ BOOTSTRAP_LOCAL_PATHS = (
     Path(".claude/settings.local.json"),
 )
 
+REQUIRED_GIT_TRACKED_PATHS = (
+    Path("packages/PyBondLab/PyBondLab/data/__init__.py"),
+    Path("packages/PyBondLab/PyBondLab/data/data_loading.py"),
+    Path("packages/PyBondLab/PyBondLab/data/WRDS/__init__.py"),
+    Path("packages/PyBondLab/PyBondLab/data/WRDS/breakpoints_wrds.csv"),
+)
+
 EXACT_FORBIDDEN_PATHS = (Path(".Rhistory"),)
 
 FORBIDDEN_DIR_NAMES = {"__pycache__"}
-FORBIDDEN_DIR_PREFIXES = (".tmp-",)
+FORBIDDEN_DIR_PREFIXES = (".tmp-", ".test-tmp-")
 FORBIDDEN_DIR_SUFFIXES = (".egg-info",)
 FORBIDDEN_FILE_SUFFIXES = (".pyc", ".pyo", ".pyd", ".nbc", ".nbi")
 
@@ -78,6 +99,7 @@ SHARED_TEXT_FILES = (
     Path("docs/ai/wrds.md"),
     Path("docs/ai/pybondlab.md"),
     Path("docs/ai/writing.md"),
+    Path("CONTRIBUTING.md"),
     Path("packages/PyBondLab/AGENTS.md"),
     Path("tools/bootstrap.py"),
     Path("tools/onboard_probe.py"),
@@ -85,14 +107,16 @@ SHARED_TEXT_FILES = (
 )
 
 REQUIRED_BOOTSTRAP_SNIPPETS = {
-    Path("README.md"): ("tools/bootstrap.py", "/onboard", "LOCAL_ENV.md"),
-    Path("AGENTS.md"): ("tools/bootstrap.py", "docs/ai/onboarding.md", "LOCAL_ENV.md"),
-    Path("CLAUDE.md"): ("tools/bootstrap.py", "/onboard", "LOCAL_ENV.md"),
-    Path("docs/ai/onboarding.md"): ("tools/bootstrap.py", "audit", "bootstrap_plan", "apply", "/onboard", "Codex"),
+    Path("README.md"): ("tools/bootstrap.py", "/onboard", "canonical local state"),
+    Path("AGENTS.md"): ("tools/bootstrap.py", "docs/ai/onboarding.md", "canonical local state"),
+    Path("CLAUDE.md"): ("tools/bootstrap.py", "/onboard", "canonical local state"),
+    Path("CONTRIBUTING.md"): ("tools/bootstrap.py", "canonical local state", "/onboard"),
+    Path("docs/ai/onboarding.md"): ("tools/bootstrap.py", "audit", "bootstrap_plan", "apply", "/onboard", "canonical local state"),
     Path(".claude/skills/onboard/SKILL.md"): ("tools/bootstrap.py audit", "bootstrap_plan.steps", "tools/bootstrap.py apply"),
     Path("tools/onboard_probe.py"): ("def collect_probe",),
-    Path("tools/bootstrap.py"): ("audit", "repair", "apply", "collect_probe", "build_bootstrap_plan"),
-    Path("tools/onboarding_smoke_test.py"): ("validate_packaging_layout", "bootstrap.py apply", "bootstrap_plan"),
+    Path("tools/bootstrap.py"): ("audit", "repair", "apply", "collect_probe", "build_bootstrap_plan", "write_compat_shims"),
+    Path("tools/local_state.py"): ("def canonical_directories", "def local_state_records"),
+    Path("tools/onboarding_smoke_test.py"): ("validate_packaging_layout", "bootstrap.py apply", "EMPIRICAL_CLAUDE_STATE_DIR"),
     Path(".claude/skills/setup-paper/SKILL.md"): ("boilerplate/template_main.tex", "[REMOVE]", "references.bib"),
     Path(".claude/skills/new-project/SKILL.md"): ("/setup-paper",),
     Path(".claude/skills/build-context/SKILL.md"): ("guidance/paper-context.md", "guidance/"),
@@ -134,20 +158,61 @@ def run_onboarding_smoke(root: Path) -> Finding:
 
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    proc = subprocess.run(
-        [sys.executable, str(smoke_script)],
-        check=False,
-        capture_output=True,
-        text=True,
-        cwd=str(root),
-        env=env,
-        timeout=300,
-    )
+    smoke_temp_dir = Path(tempfile.mkdtemp(prefix="empirical-claude-preflight-"))
+    env["EMPIRICAL_CLAUDE_SMOKE_DIR"] = str(smoke_temp_dir)
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-B", str(smoke_script)],
+            check=False,
+            capture_output=True,
+            text=True,
+            cwd=str(root),
+            env=env,
+            timeout=300,
+        )
+    finally:
+        shutil.rmtree(smoke_temp_dir, ignore_errors=True)
     if proc.returncode == 0:
         return Finding("PASS", "Onboarding smoke test passed")
 
     detail = (proc.stderr or proc.stdout or "onboarding smoke test failed").strip()
     return Finding("FAIL", f"Onboarding smoke test failed: {detail}")
+
+
+def run_pybondlab_smoke(root: Path) -> Finding:
+    env = dict(os.environ)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    env["PYTHONPATH"] = os.pathsep.join(
+        [
+            str(root / "packages" / "PyBondLab"),
+            env.get("PYTHONPATH", ""),
+        ]
+    ).rstrip(os.pathsep)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-c",
+            (
+                "import PyBondLab as pbl; "
+                "assert pbl.StrategyFormation is not None; "
+                "assert pbl.BatchStrategyFormation is not None; "
+                "df = pbl.load_breakpoints_WRDS(); "
+                "assert not df.empty"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(root),
+        env=env,
+        timeout=120,
+    )
+    if proc.returncode == 0:
+        return Finding("PASS", "PyBondLab import and bundled-data smoke test passed")
+
+    detail = (proc.stderr or proc.stdout or "PyBondLab smoke test failed").strip()
+    return Finding("FAIL", f"PyBondLab smoke test failed: {detail}")
 
 
 def has_git_metadata(root: Path) -> bool:
@@ -172,6 +237,8 @@ def git_tracks_path(root: Path, rel_path: Path) -> bool | None:
 def collect_findings(root: Path) -> list[Finding]:
     findings: list[Finding] = []
 
+    cleanup_generated_repo_artifacts()
+
     for rel_path in REQUIRED_FILES:
         if not (root / rel_path).exists():
             findings.append(Finding("FAIL", f"Missing required file: {rel_path.as_posix()}"))
@@ -186,13 +253,24 @@ def collect_findings(root: Path) -> list[Finding]:
             findings.append(Finding("FAIL", f".gitignore is missing required entry: {entry}"))
 
     findings.append(run_onboarding_smoke(root))
+    findings.append(run_pybondlab_smoke(root))
+    cleanup_generated_repo_artifacts()
 
     for rel_path in BOOTSTRAP_LOCAL_PATHS:
         if not (root / rel_path).exists():
             continue
-        tracked = git_tracks_path(root, rel_path)
-        if tracked:
-            findings.append(Finding("FAIL", f"Tracked release tree contains local/generated file: {rel_path.as_posix()}"))
+        findings.append(Finding("FAIL", f"Release tree contains repo-root local/generated file: {rel_path.as_posix()}"))
+
+    if has_git_metadata(root):
+        for rel_path in REQUIRED_GIT_TRACKED_PATHS:
+            if git_tracks_path(root, rel_path):
+                continue
+            findings.append(
+                Finding(
+                    "FAIL",
+                    f"Required PyBondLab package file is not tracked by git: {rel_path.as_posix()}",
+                )
+            )
 
     for rel_path in EXACT_FORBIDDEN_PATHS:
         if (root / rel_path).exists():
@@ -249,8 +327,8 @@ def collect_findings(root: Path) -> list[Finding]:
             findings.append(Finding("FAIL", "README.md does not document tools/bootstrap.py"))
         if "release_preflight.py" not in readme:
             findings.append(Finding("WARN", "README.md does not mention the release preflight checker"))
-        if "LOCAL_ENV.md" not in readme:
-            findings.append(Finding("FAIL", "README.md does not document LOCAL_ENV.md"))
+        if "canonical local state" not in readme:
+            findings.append(Finding("FAIL", "README.md does not document canonical external local state"))
 
     agents_path = root / "AGENTS.md"
     if agents_path.exists():
@@ -259,16 +337,16 @@ def collect_findings(root: Path) -> list[Finding]:
             findings.append(Finding("FAIL", "AGENTS.md does not route onboarding tasks"))
         if "tools/bootstrap.py" not in agents:
             findings.append(Finding("FAIL", "AGENTS.md does not reference tools/bootstrap.py"))
-        if "LOCAL_ENV.md" not in agents:
-            findings.append(Finding("FAIL", "AGENTS.md does not reference LOCAL_ENV.md"))
+        if "canonical local state" not in agents:
+            findings.append(Finding("FAIL", "AGENTS.md does not reference canonical local state"))
 
     claude_path = root / "CLAUDE.md"
     if claude_path.exists():
         claude = read_text(claude_path)
         if "tools/bootstrap.py" not in claude:
             findings.append(Finding("FAIL", "CLAUDE.md does not reference tools/bootstrap.py"))
-        if "LOCAL_ENV.md" not in claude:
-            findings.append(Finding("FAIL", "CLAUDE.md does not reference LOCAL_ENV.md"))
+        if "canonical local state" not in claude:
+            findings.append(Finding("FAIL", "CLAUDE.md does not reference canonical local state"))
 
     onboarding_path = root / "docs" / "ai" / "onboarding.md"
     if onboarding_path.exists():

@@ -14,6 +14,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from importlib import metadata
@@ -553,6 +554,27 @@ def build_bootstrap_plan(report: dict[str, Any]) -> dict[str, Any]:
     missing_local_files = [item["path"] for item in report["local_files"] if item["status"] != "OK"]
     steps: list[dict[str, Any]] = []
 
+    storage_hint = probe["local_state"]["storage_hint"]
+    synced_compat_files = [
+        item["path"]
+        for item in report.get("compatibility_files", [])
+        if item.get("status") == "OK"
+    ]
+    if storage_hint["kind"] == "synced_folder_candidate" and synced_compat_files:
+        steps.append(
+            {
+                "id": "remove_synced_compat_shims",
+                "label": "Remove repo-root compat shims from synced folder",
+                "required": True,
+                "reason": (
+                    f"Synced folder detected ({storage_hint['provider']}); "
+                    f"compat shims leak user-specific state: {', '.join(synced_compat_files)}"
+                ),
+                "powershell": "Remove-Item -Path LOCAL_ENV.md, CLAUDE.local.md, .claude\\settings.local.json -ErrorAction SilentlyContinue",
+                "bash": "rm -f LOCAL_ENV.md CLAUDE.local.md .claude/settings.local.json",
+            }
+        )
+
     if missing_modules:
         specs = [PACKAGE_INSTALL_SPECS[name] for name in missing_modules]
         ps_parts, bash_parts = _plan_install_parts(probe, specs)
@@ -654,6 +676,7 @@ def summary_rows(report: dict[str, Any]) -> list[tuple[str, str]]:
         ("Repo packages", "OK" if repo_ok else "PARTIAL"),
         ("Local state", "OK" if local_state_ok else "PARTIAL"),
         ("Repo shims", compat_status),
+        ("Synced-folder safety", report.get("synced_folder_status", "NOT_SYNCED")),
         ("Bash", "OK" if probe["tools"]["bash"]["path"] else "FAIL"),
         ("psql", "OK" if probe["tools"]["psql"]["path"] else "NOT INSTALLED (optional)"),
         ("WRDS files", "OK" if wrds_files_ok else "PARTIAL"),
@@ -681,7 +704,14 @@ def build_actions(report: dict[str, Any]) -> list[str]:
         )
 
     if any(item["status"] == "OK" for item in report["compatibility_files"]):
-        actions.append("Remove or avoid repo-root compatibility shims unless you explicitly need legacy Claude/Codex compatibility in a private single-user working copy.")
+        if storage_hint["kind"] == "synced_folder_candidate":
+            actions.append(
+                f"FAIL: Repo-root compatibility shims exist in a synced folder ({storage_hint['provider']}). "
+                "Remove LOCAL_ENV.md, CLAUDE.local.md, and .claude/settings.local.json from the repo root "
+                "to prevent cross-user state collisions. Canonical local state already lives at the external path reported above."
+            )
+        else:
+            actions.append("Remove or avoid repo-root compatibility shims unless you explicitly need legacy Claude/Codex compatibility in a private single-user working copy.")
 
     if not probe["tools"]["uv"]["path"]:
         actions.append(
@@ -721,6 +751,17 @@ def build_actions(report: dict[str, Any]) -> list[str]:
     return actions
 
 
+def _synced_folder_audit_status(report: dict[str, Any]) -> str:
+    """Return synced-folder audit status: NOT_SYNCED, OK, or FAIL."""
+    hint = report["probe"]["local_state"]["storage_hint"]
+    if hint["kind"] != "synced_folder_candidate":
+        return "NOT_SYNCED"
+    has_compat = any(
+        item["status"] == "OK" for item in report.get("compatibility_files", [])
+    )
+    return "FAIL" if has_compat else "OK"
+
+
 def build_report(*, skip_wrds_test: bool) -> dict[str, Any]:
     probe = collect_probe()
     report = {
@@ -737,6 +778,7 @@ def build_report(*, skip_wrds_test: bool) -> dict[str, Any]:
         "bash": bash_commands(probe),
     }
     report["bootstrap_plan"] = build_bootstrap_plan(report)
+    report["synced_folder_status"] = _synced_folder_audit_status(report)
     report["summary"] = summary_rows(report)
     report["actions"] = build_actions(report)
     return report
@@ -781,7 +823,7 @@ def render_local_env(report: dict[str, Any], *, compatibility_shim: bool = False
         "## Local State Paths",
         f"- Config directory: `{local_state['config_dir']}`",
         f"- State directory: `{local_state['state_dir']}`",
-        f"- Active local_env source: {local_state['files']['local_env']['active_source']}",
+        f"- Active local_env source: {'canonical' if not compatibility_shim else local_state['files']['local_env']['active_source']}",
         "",
         "## Tool Paths",
         "| Tool | Path | Version |",
@@ -876,7 +918,7 @@ def render_claude_local(report: dict[str, Any], *, compatibility_shim: bool = Fa
     return "\n".join(lines) + "\n"
 
 
-def bash_allow_entries(probe: dict[str, Any]) -> list[str]:
+def bash_allow_entries(probe: dict[str, Any]) -> list[str]:  # Retained for reference; no longer called by render_settings_local().
     def variants(path: str) -> list[str]:
         items = [path]
         slash_path = path.replace("\\", "/")
@@ -1005,35 +1047,34 @@ def cleanup_generated_repo_artifacts() -> list[str]:
 
 
 def render_settings_local(report: dict[str, Any], current_path: Path) -> str:
+    """Render settings.local.json preserving existing content.
+
+    Machine-specific Bash entries are no longer injected.  The shared
+    settings.json already has generic globs (*/python*, */psql*) that cover
+    all tools, and Claude Code's overwrite bug (GitHub #9234, #9814, #9875)
+    replaces the entire permissions array on each "always allow" click,
+    making machine-specific entries pointless.
+    """
     current = load_json(current_path)
     if not isinstance(current, dict):
         current = {}
-
-    permissions = current.get("permissions")
-    if not isinstance(permissions, dict):
-        permissions = {}
-    allow = permissions.get("allow")
-    if not isinstance(allow, list):
-        allow = []
-    deny = permissions.get("deny")
-    if not isinstance(deny, list):
-        deny = []
-
-    preserved_allow = [
-        entry
-        for entry in allow
-        if not (isinstance(entry, str) and entry.startswith("Bash("))
-    ]
-    permissions["allow"] = preserved_allow + bash_allow_entries(report["probe"])
-    permissions["deny"] = deny
-
-    current["permissions"] = permissions
+    if "permissions" not in current:
+        current["permissions"] = {"allow": [], "deny": []}
     return json.dumps(current, indent=2) + "\n"
 
 
 def write_outputs(report: dict[str, Any], *, write_compat_shims: bool = False) -> list[str]:
     written_files: list[str] = []
     local_state = report["probe"]["local_state"]["files"]
+
+    storage_hint = report["probe"]["local_state"]["storage_hint"]
+    if write_compat_shims and storage_hint["kind"] == "synced_folder_candidate":
+        warnings.warn(
+            f"Refusing --write-compat-shims: repo is in a synced folder ({storage_hint['provider']}). "
+            "Compat shims would leak user-specific state to other users.",
+            stacklevel=2,
+        )
+        write_compat_shims = False
 
     canonical_local_env = Path(local_state["local_env"]["canonical_path"])
     canonical_claude_local = Path(local_state["claude_local"]["canonical_path"])
