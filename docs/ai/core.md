@@ -8,6 +8,7 @@ extraction, PyBondLab factor construction, and academic writing.
 - Shared repo-wide AI guidance lives in `docs/ai/`.
 - Claude Code uses `CLAUDE.md` and `.claude/`, but they should point back to this shared layer for repo-wide rules.
 - Codex uses `AGENTS.md` plus these shared docs.
+- Gemini CLI uses `GEMINI.md` (which imports `AGENTS.md`) plus these shared docs. Skills and agents in `.claude/` are plain markdown and can be read directly by any tool.
 
 ## Local State
 
@@ -30,7 +31,7 @@ These repo-root files are optional compatibility shims and must never be committ
 - `data/` - extracted datasets, always local/output state
 - `boilerplate/` - shared LaTeX paper template and starter bibliography for new papers
 - `projects/<name>/guidance/` - per-project paper context and writing guidance, including `paper-context.md`
-- `.claude/` - Claude-specific adapters, rules, agents, and skills
+- `.claude/` - CLI adapters, rules, agents, and skills (Claude-native; readable by any tool as plain markdown)
 - `.claude/hooks/` - Claude Code-only automation hooks such as LaTeX rebuild and pre-commit preflight
 - `tools/` - probe and release-preflight utilities
 

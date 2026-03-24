@@ -5,7 +5,7 @@ Thank you for your interest in contributing to this project.
 ## Getting Started
 
 1. Clone the repository.
-2. Run `/onboard` (Claude Code) or follow `docs/ai/onboarding.md` (Codex).
+2. Run `/onboard` (Claude Code) or follow `docs/ai/onboarding.md` (Codex / Gemini CLI).
 3. This runs `tools/bootstrap.py audit`, executes the emitted bootstrap plan
    commands, then runs `tools/bootstrap.py apply` to write canonical local state
    to a per-user external directory outside the repo.

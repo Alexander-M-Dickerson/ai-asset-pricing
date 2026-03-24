@@ -1,10 +1,10 @@
 # Empirical Finance Agent Guide
 
-This repository is designed to work well with both Codex and Claude Code.
+This repository is designed to work well with Codex, Claude Code, and Gemini CLI.
 
 For Codex, this file is the primary routing layer. For Claude, the `.claude/`
 surface remains active, but the shared source of truth for repo-wide behavior
-should live in `docs/ai/`.
+should live in `docs/ai/`. Gemini CLI uses `GEMINI.md` which imports this file.
 
 ## Core Contract
 
@@ -14,6 +14,7 @@ should live in `docs/ai/`.
 - Treat repo-root `LOCAL_ENV.md` / `CLAUDE.local.md` as optional compatibility shims, not the source of truth.
 - Never commit `LOCAL_ENV.md`, `CLAUDE.local.md`, or `.claude/settings.local.json`.
 - Run `tools/release_preflight.py --strict` before a shared release.
+- Gemini CLI uses `GEMINI.md` which imports this file. See `GEMINI.md` for Gemini-specific notes.
 
 ## Task Routing
 

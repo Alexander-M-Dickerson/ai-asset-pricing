@@ -1,6 +1,6 @@
 # Shared Onboarding
 
-This repo has one repo-local onboarding engine for both Claude Code and Codex:
+This repo has one repo-local onboarding engine for Claude Code, Codex, and Gemini CLI:
 `tools/bootstrap.py`.
 
 ## Canonical Local State
@@ -43,6 +43,7 @@ not required.
 
 - Claude Code users: clone the repo, run `/onboard`, and let the skill wrap the shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
 - Codex users: clone the repo, ask Codex to set up the repo, and have it run the same shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
+- Gemini CLI users: clone the repo, follow the bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow described above. Read `GEMINI.md` for Gemini-specific notes.
 
 ## Underlying Probe
 

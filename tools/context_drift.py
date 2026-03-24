@@ -50,6 +50,9 @@ DRIFT_MAP: list[tuple[str, str]] = [
     # CONTRIBUTING.md must reflect onboarding and bootstrap
     ("tools/bootstrap.py", "CONTRIBUTING.md"),
     ("docs/ai/onboarding.md", "CONTRIBUTING.md"),
+    # GEMINI.md imports AGENTS.md and must stay in sync
+    ("AGENTS.md", "GEMINI.md"),
+    ("docs/ai/onboarding.md", "GEMINI.md"),
 ]
 
 # Minimum staleness in days before flagging (avoids noise from same-day commits).
