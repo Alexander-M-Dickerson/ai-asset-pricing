@@ -37,7 +37,7 @@ def bash_canonical_state_dir(*, env: dict[str, str]) -> str:
 @pytest.mark.parametrize("env_overrides,system_name", [
     # env-var override path — should bypass platform detection
     (
-        {"EMPIRICAL_CLAUDE_STATE_DIR": "/tmp/test-state"},
+        {"AI_ASSET_PRICING_STATE_DIR": "/tmp/test-state"},
         "Linux",
     ),
     # Linux XDG default (no XDG_STATE_HOME set)
@@ -62,7 +62,7 @@ def test_state_dir_parity(env_overrides, system_name):
 
     # Bash result — start with a clean env, then apply overrides
     bash_env = {"PATH": os.environ.get("PATH", "")}
-    for key in ("EMPIRICAL_CLAUDE_STATE_DIR", "XDG_STATE_HOME", "HOME",
+    for key in ("AI_ASSET_PRICING_STATE_DIR", "XDG_STATE_HOME", "HOME",
                 "LOCALAPPDATA", "USERPROFILE", "APPDATA"):
         bash_env.pop(key, None)
     bash_env.update(env_overrides)

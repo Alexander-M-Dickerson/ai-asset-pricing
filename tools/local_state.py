@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 
-APP_NAME = "empirical-claude"
+APP_NAME = "ai-asset-pricing"
 CANONICAL_FILENAMES = {
     "local_env": "local_env.md",
     "claude_local": "claude.local.md",
@@ -63,8 +63,8 @@ def canonical_directories(
     system_label = _platform_name(system_name=system_name, os_name=os_name)
     home = _home_path(env, system_label=system_label)
 
-    config_override = _env_path(env, "EMPIRICAL_CLAUDE_CONFIG_DIR")
-    state_override = _env_path(env, "EMPIRICAL_CLAUDE_STATE_DIR")
+    config_override = _env_path(env, "AI_ASSET_PRICING_CONFIG_DIR")
+    state_override = _env_path(env, "AI_ASSET_PRICING_STATE_DIR")
 
     if config_override or state_override:
         config_dir = config_override or state_override or home / ".config" / APP_NAME

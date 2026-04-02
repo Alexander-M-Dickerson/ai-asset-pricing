@@ -119,7 +119,7 @@ REQUIRED_BOOTSTRAP_SNIPPETS = {
     Path("tools/onboard_probe.py"): ("def collect_probe",),
     Path("tools/bootstrap.py"): ("audit", "repair", "apply", "collect_probe", "build_bootstrap_plan", "write_compat_shims"),
     Path("tools/local_state.py"): ("def canonical_directories", "def local_state_records"),
-    Path("tools/onboarding_smoke_test.py"): ("validate_packaging_layout", "bootstrap.py apply", "EMPIRICAL_CLAUDE_STATE_DIR"),
+    Path("tools/onboarding_smoke_test.py"): ("validate_packaging_layout", "bootstrap.py apply", "AI_ASSET_PRICING_STATE_DIR"),
     Path(".claude/skills/setup-paper/SKILL.md"): ("boilerplate/template_main.tex", "[REMOVE]", "references.bib"),
     Path(".claude/skills/new-project/SKILL.md"): ("/setup-paper",),
     Path(".claude/skills/build-context/SKILL.md"): ("guidance/paper-context.md", "guidance/"),
@@ -161,8 +161,8 @@ def run_onboarding_smoke(root: Path) -> Finding:
 
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    smoke_temp_dir = Path(tempfile.mkdtemp(prefix="empirical-claude-preflight-"))
-    env["EMPIRICAL_CLAUDE_SMOKE_DIR"] = str(smoke_temp_dir)
+    smoke_temp_dir = Path(tempfile.mkdtemp(prefix="ai-asset-pricing-preflight-"))
+    env["AI_ASSET_PRICING_SMOKE_DIR"] = str(smoke_temp_dir)
     try:
         proc = subprocess.run(
             [sys.executable, "-B", str(smoke_script)],

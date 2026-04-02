@@ -22,8 +22,8 @@ def test_canonical_directories_windows():
         "LOCALAPPDATA": r"C:\Users\alice\AppData\Local",
     }
     result = canonical_directories(env=env, system_name="Windows")
-    assert result["config_dir"] == Path(r"C:\Users\alice\AppData\Roaming") / "empirical-claude"
-    assert result["state_dir"] == Path(r"C:\Users\alice\AppData\Local") / "empirical-claude"
+    assert result["config_dir"] == Path(r"C:\Users\alice\AppData\Roaming") / "ai-asset-pricing"
+    assert result["state_dir"] == Path(r"C:\Users\alice\AppData\Local") / "ai-asset-pricing"
 
 
 def test_canonical_directories_macos():
@@ -31,7 +31,7 @@ def test_canonical_directories_macos():
         "HOME": "/Users/alice",
     }
     result = canonical_directories(env=env, system_name="Darwin")
-    base = Path("/Users/alice/Library/Application Support/empirical-claude")
+    base = Path("/Users/alice/Library/Application Support/ai-asset-pricing")
     assert result["config_dir"] == base / "config"
     assert result["state_dir"] == base / "state"
 
@@ -50,7 +50,7 @@ def test_local_state_prefers_canonical_over_compat(monkeypatch):
         canonical_local_env = state_dir / "local_env.md"
         canonical_local_env.write_text("canonical", encoding="utf-8")
 
-        monkeypatch.setenv("EMPIRICAL_CLAUDE_STATE_DIR", str(state_dir))
+        monkeypatch.setenv("AI_ASSET_PRICING_STATE_DIR", str(state_dir))
         records = local_state_records(repo_root)
         local_env = records["files"]["local_env"]
         assert local_env["active_source"] == "canonical"
@@ -69,11 +69,11 @@ def test_two_users_same_repo_get_distinct_canonical_paths():
 
         records_a = local_state_records(
             repo_root,
-            env={"EMPIRICAL_CLAUDE_STATE_DIR": str(temp_path / "alice-state")},
+            env={"AI_ASSET_PRICING_STATE_DIR": str(temp_path / "alice-state")},
         )
         records_b = local_state_records(
             repo_root,
-            env={"EMPIRICAL_CLAUDE_STATE_DIR": str(temp_path / "bob-state")},
+            env={"AI_ASSET_PRICING_STATE_DIR": str(temp_path / "bob-state")},
         )
 
         assert records_a["files"]["local_env"]["canonical_path"] != records_b["files"]["local_env"]["canonical_path"]

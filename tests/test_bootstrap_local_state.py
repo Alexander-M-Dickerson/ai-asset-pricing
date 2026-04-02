@@ -127,7 +127,7 @@ def test_build_bootstrap_plan_emits_cleanup_for_synced_compat_shims():
 def test_write_outputs_refuses_compat_shims_in_synced_folder(monkeypatch, tmp_path):
     state_dir = tmp_path / "state"
     state_dir.mkdir()
-    monkeypatch.setenv("EMPIRICAL_CLAUDE_STATE_DIR", str(state_dir))
+    monkeypatch.setenv("AI_ASSET_PRICING_STATE_DIR", str(state_dir))
 
     report = _make_minimal_report(
         state_dir=state_dir,

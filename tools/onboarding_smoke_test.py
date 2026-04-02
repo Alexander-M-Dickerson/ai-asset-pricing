@@ -91,7 +91,7 @@ def build_temp_repo(temp_root: Path) -> Path:
 
 def smoke_base_dir(env: Mapping[str, str] | None = None) -> Path:
     env = env or os.environ
-    override = env.get("EMPIRICAL_CLAUDE_SMOKE_DIR", "").strip()
+    override = env.get("AI_ASSET_PRICING_SMOKE_DIR", "").strip()
     if override:
         return Path(override).expanduser()
     return Path(tempfile.gettempdir())
@@ -163,8 +163,8 @@ def main() -> int:
 
         env = dict(os.environ)
         env["PYTHONDONTWRITEBYTECODE"] = "1"
-        env["EMPIRICAL_CLAUDE_CONFIG_DIR"] = str(temp_root / "user-config")
-        env["EMPIRICAL_CLAUDE_STATE_DIR"] = str(temp_root / "user-state")
+        env["AI_ASSET_PRICING_CONFIG_DIR"] = str(temp_root / "user-config")
+        env["AI_ASSET_PRICING_STATE_DIR"] = str(temp_root / "user-state")
 
         validate_packaging_layout(clone_root)
 
