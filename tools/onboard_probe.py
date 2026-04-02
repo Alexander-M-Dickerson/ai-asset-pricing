@@ -200,7 +200,14 @@ def collect_probe() -> dict[str, Any]:
     bashrc = home / ".bashrc"
     appdata = Path(os.environ.get("APPDATA", "")) if os.environ.get("APPDATA") else None
 
-    python_path = str(Path(sys.executable).resolve())
+    # Prefer the unresolved sys.executable when running inside a venv so that
+    # downstream commands target the venv interpreter (and its site-packages)
+    # rather than the base system Python that symlinks point to.
+    _in_venv = sys.prefix != sys.base_prefix
+    if _in_venv:
+        python_path = str(Path(sys.executable))
+    else:
+        python_path = str(Path(sys.executable).resolve())
     python_version = platform.python_version()
     pip_command = f'"{python_path}" -m pip'
     shell = os.environ.get("SHELL") or os.environ.get("ComSpec") or ""
@@ -229,6 +236,8 @@ def collect_probe() -> dict[str, Any]:
             "version": python_version,
             "pip_command": pip_command,
             "conda_path": conda_path,
+            "venv": _in_venv,
+            "base_prefix": str(sys.base_prefix) if _in_venv else "",
         },
         "tools": {
             "uv": {
