@@ -7,17 +7,19 @@
 WRDS data work, factor-model workflows, PyBondLab package use, automation of
 repeated research tasks, and LaTeX paper writing.
 
-The main promise is simple: clone the repo, run `/onboard`, and get to a
-research-ready workflow without hand-editing machine-specific config inside the
-shared tree.
+The main promise is simple: clone the repo, ask your agent to onboard the repo,
+and get to a research-ready workflow without hand-editing machine-specific
+config inside the shared tree.
 
 ## Clone to Research-Ready
 
 ### Claude Code users
 
-Run `/onboard`.
+Ask Claude Code to onboard the repo. The standard Claude entry point is
+`/onboard`.
 
-It is a thin wrapper over the shared `tools/bootstrap.py` engine:
+Under the hood, `/onboard` is a thin wrapper over the shared
+`tools/bootstrap.py` engine:
 
 1. `tools/bootstrap.py audit`
 2. execute the emitted `bootstrap_plan`
@@ -26,9 +28,10 @@ It is a thin wrapper over the shared `tools/bootstrap.py` engine:
 
 ### Codex and Gemini CLI users
 
-The flow is the same, but without the Claude slash command wrapper:
+Ask Codex or Gemini CLI in chat to onboard or set up the repo. They should run
+the same shared flow for you, but without the Claude slash command wrapper:
 
-1. run `tools/bootstrap.py audit`
+1. `tools/bootstrap.py audit`
 2. execute the required commands from `bootstrap_plan`
 3. run `tools/bootstrap.py apply`
 4. rerun `tools/bootstrap.py audit`
@@ -159,6 +162,16 @@ Before publishing shared changes, run:
 Strict preflight auto-cleans repo temp artifacts such as test temp folders and
 `__pycache__`, but it still fails if the release tree contains repo-root local
 state like `.venv/`, `.Rhistory`, or repo-root compatibility shims.
+
+## Acknowledgements
+
+- [Piotr Orlowski](https://github.com/piotrek-orlowski) and the
+  [`claude-wrds-public`](https://github.com/piotrek-orlowski/claude-wrds-public/tree/main/agents)
+  agent set, which provided the starting point for some WRDS-oriented agent
+  materials used here and then heavily augmented for this repo.
+- [Scott Cunningham's `MixtapeTools`](https://github.com/scunning1975/MixtapeTools),
+  which provided some base rules and skills that were also heavily augmented for
+  this workflow.
 
 ## License
 

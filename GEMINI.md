@@ -7,8 +7,10 @@ and adds Gemini-specific notes.
 
 ## Gemini-Specific Notes
 
-- Onboarding: run `tools/bootstrap.py audit`, execute the bootstrap plan, then
-  `tools/bootstrap.py apply`. This is the same flow as Claude `/onboard` and Codex.
+- Onboarding: ask Gemini CLI to onboard or set up the repo in chat. Under the
+  hood it should run `tools/bootstrap.py audit`, execute the bootstrap plan,
+  then `tools/bootstrap.py apply`. This is the same shared flow as Claude
+  `/onboard` and Codex.
 - Skills: read `.claude/skills/*/SKILL.md` files directly — they are plain markdown
   instructions, not Claude-binary artifacts. Gemini can follow them as-is.
 - Domain experts: read `.claude/agents/*.md` for deep WRDS, CRSP, OptionMetrics,

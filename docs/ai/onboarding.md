@@ -28,6 +28,10 @@ single-user backward compatibility inside a private working copy.
 
 ## Shared Bootstrap Flow
 
+For normal agent use, the user should not need to type these commands by hand.
+They should ask the agent to onboard or set up the repo, and the agent should
+run this shared flow on their behalf.
+
 1. Find a working Python interpreter.
 2. Run `<python> tools/bootstrap.py audit`.
 3. Execute the required shell-specific commands listed in the audit report's `bootstrap_plan`.
@@ -41,9 +45,9 @@ not required.
 
 ## Tool-Specific Entry Points
 
-- Claude Code users: clone the repo, run `/onboard`, and let the skill wrap the shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
-- Codex users: clone the repo, ask Codex to set up the repo, and have it run the same shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
-- Gemini CLI users: clone the repo, follow the bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow described above. Read `GEMINI.md` for Gemini-specific notes.
+- Claude Code users: clone the repo, ask Claude to onboard the repo, and let `/onboard` wrap the shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
+- Codex users: clone the repo, ask Codex in chat to onboard or set up the repo, and have it run the same shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
+- Gemini CLI users: clone the repo, ask Gemini CLI to onboard or set up the repo, and have it run the same shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow. Read `GEMINI.md` for Gemini-specific notes.
 
 ## Underlying Probe
 
