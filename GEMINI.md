@@ -18,9 +18,9 @@ and adds Gemini-specific notes.
 - Hooks: `.claude/hooks/` are Claude Code automation (LaTeX rebuild, pre-commit
   preflight). Gemini CLI users should run `tools/release_preflight.py --strict`
   manually before commits.
-- Strict preflight auto-cleans repo temp artifacts, but it still treats
-  repo-root `.venv/`, `.Rhistory`, and repo-root compatibility shims as
-  release blockers.
+- Strict preflight auto-cleans repo temp artifacts and tolerates gitignored
+  repo-root virtual environments such as `.venv/`, but it still treats
+  `.Rhistory` and repo-root compatibility shims as release blockers.
 - MCP: Perplexity MCP is configured in `.claude/settings.json`. Gemini users
   should configure equivalent MCP servers in `.gemini/settings.json` if needed.
 - The canonical local state lives outside the repo. See `docs/ai/onboarding.md`.

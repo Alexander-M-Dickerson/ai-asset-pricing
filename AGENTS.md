@@ -14,7 +14,7 @@ should live in `docs/ai/`. Gemini CLI uses `GEMINI.md` which imports this file.
 - Treat repo-root `LOCAL_ENV.md` / `CLAUDE.local.md` as optional compatibility shims, not the source of truth.
 - Never commit `LOCAL_ENV.md`, `CLAUDE.local.md`, or `.claude/settings.local.json`.
 - Run `tools/release_preflight.py --strict` before a shared release.
-- Strict preflight auto-cleans repo temp artifacts, but repo-root `.venv/`, `.Rhistory`, and repo-root compatibility shims still block a release-ready tree.
+- Strict preflight auto-cleans repo temp artifacts and tolerates gitignored repo-root virtual environments such as `.venv/`, but `.Rhistory` and repo-root compatibility shims still block a release-ready tree.
 - Gemini CLI uses `GEMINI.md` which imports this file. See `GEMINI.md` for Gemini-specific notes.
 
 ## Task Routing

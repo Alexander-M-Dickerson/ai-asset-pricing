@@ -81,7 +81,7 @@ REQUIRED_GIT_TRACKED_PATHS = (
 EXACT_FORBIDDEN_PATHS = (Path(".Rhistory"),)
 
 FORBIDDEN_DIR_NAMES = {"__pycache__"}
-ROOT_LEVEL_FORBIDDEN_DIR_NAMES = {".venv", "venv"}
+ROOT_LEVEL_IGNORED_DIR_NAMES = {".venv", "venv"}
 FORBIDDEN_DIR_PREFIXES = (".tmp-", ".test-tmp-")
 FORBIDDEN_DIR_SUFFIXES = (".egg-info",)
 FORBIDDEN_FILE_SUFFIXES = (".pyc", ".pyo", ".pyd", ".nbc", ".nbi")
@@ -280,13 +280,7 @@ def collect_release_tree_findings(root: Path) -> list[Finding]:
             if dirname == ".git":
                 continue
             relative = Path(dirname) if relative_root == Path(".") else relative_root / dirname
-            if relative_root == Path(".") and dirname in ROOT_LEVEL_FORBIDDEN_DIR_NAMES:
-                findings.append(
-                    Finding(
-                        "FAIL",
-                        f"Release tree contains repo-root virtual environment directory: {relative.as_posix()}/",
-                    )
-                )
+            if relative_root == Path(".") and dirname in ROOT_LEVEL_IGNORED_DIR_NAMES:
                 continue
             if (
                 dirname in FORBIDDEN_DIR_NAMES

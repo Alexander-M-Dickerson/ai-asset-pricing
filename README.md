@@ -160,8 +160,9 @@ Before publishing shared changes, run:
 ```
 
 Strict preflight auto-cleans repo temp artifacts such as test temp folders and
-`__pycache__`, but it still fails if the release tree contains repo-root local
-state like `.venv/`, `.Rhistory`, or repo-root compatibility shims.
+`__pycache__`, and it tolerates gitignored repo-root virtual environments such
+as `.venv/`. It still fails if the release tree contains `.Rhistory` or
+repo-root compatibility shims.
 
 ## Acknowledgements
 

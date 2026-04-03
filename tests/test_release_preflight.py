@@ -32,7 +32,7 @@ def test_cleanup_generated_repo_artifacts_removes_repo_temp_roots(tmp_path):
     assert (repo_root / ".venv").exists()
 
 
-def test_collect_findings_reports_repo_root_venv_once(monkeypatch, tmp_path):
+def test_collect_findings_ignores_repo_root_venv(monkeypatch, tmp_path):
     root = tmp_path / "repo"
     (root / ".venv" / "Lib" / "site-packages").mkdir(parents=True)
     (root / ".venv" / "Lib" / "site-packages" / "nested.pyd").write_bytes(b"binary")
@@ -51,7 +51,7 @@ def test_collect_findings_reports_repo_root_venv_once(monkeypatch, tmp_path):
     findings = preflight.collect_findings(root)
     fail_messages = [finding.message for finding in findings if finding.level == "FAIL"]
 
-    assert fail_messages == ["Release tree contains repo-root virtual environment directory: .venv/"]
+    assert fail_messages == []
 
 
 def test_collect_findings_reports_auto_cleaned_artifacts(monkeypatch, tmp_path):

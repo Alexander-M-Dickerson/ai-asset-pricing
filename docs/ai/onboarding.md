@@ -77,7 +77,7 @@ agent runtime to request any needed approvals for package installation.
 - If canonical local state is missing, create it before relying on machine-specific commands.
 - Prefer `tools/bootstrap.py audit`, its emitted `bootstrap_plan`, and `tools/bootstrap.py apply` over ad hoc local file generation.
 - Keep `tools/bootstrap.py repair --write-canonical-state` as a convenience fallback for unsandboxed local terminals.
-- `tools/release_preflight.py --strict` auto-cleans repo temp artifacts such as `.tmp-*`, `.test-tmp-*`, and `__pycache__`, but it still treats repo-root `.venv/`, `.Rhistory`, and repo-root compatibility shims as release blockers.
+- `tools/release_preflight.py --strict` auto-cleans repo temp artifacts such as `.tmp-*`, `.test-tmp-*`, and `__pycache__`, and it tolerates gitignored repo-root virtual environments such as `.venv/`. It still treats `.Rhistory` and repo-root compatibility shims as release blockers.
 - If the repo lives in Dropbox/OneDrive, keep canonical local state external and avoid repo-root compatibility shims unless the working copy is private to one machine.
 - Dropbox/OneDrive are supported sync layers, not a substitute for Git merge/conflict handling on the same tracked code/config files.
 - If WRDS access is missing, record the missing pieces explicitly but treat onboarding as complete. WRDS is optional — only needed for data extraction workflows.
