@@ -191,6 +191,17 @@ def bashrc_flags(bashrc: Path, home: Path) -> dict[str, str]:
     }
 
 
+def running_in_virtualenv() -> bool:
+    return sys.prefix != sys.base_prefix
+
+
+def reported_python_path() -> str:
+    executable = Path(sys.executable)
+    if running_in_virtualenv():
+        return str(executable if executable.is_absolute() else executable.absolute())
+    return str(executable.resolve())
+
+
 def collect_probe() -> dict[str, Any]:
     home = Path.home()
     pg_service = home / ".pg_service.conf"
@@ -200,7 +211,7 @@ def collect_probe() -> dict[str, Any]:
     bashrc = home / ".bashrc"
     appdata = Path(os.environ.get("APPDATA", "")) if os.environ.get("APPDATA") else None
 
-    python_path = str(Path(sys.executable).resolve())
+    python_path = reported_python_path()
     python_version = platform.python_version()
     pip_command = f'"{python_path}" -m pip'
     shell = os.environ.get("SHELL") or os.environ.get("ComSpec") or ""

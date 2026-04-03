@@ -17,8 +17,10 @@ sys.dont_write_bytecode = True
 
 try:
     from tools.bootstrap import cleanup_generated_repo_artifacts, force_rmtree
+    from tools.onboard_probe import reported_python_path
 except ImportError:  # pragma: no cover - script execution path
     from bootstrap import cleanup_generated_repo_artifacts, force_rmtree
+    from onboard_probe import reported_python_path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYBONDLAB_ROOT = REPO_ROOT / "packages" / "PyBondLab"
@@ -153,13 +155,17 @@ def cleanup_legacy_repo_smoke_dirs() -> list[str]:
     return failed
 
 
+def runtime_python_path() -> Path:
+    return Path(reported_python_path())
+
+
 def main() -> int:
     cleanup_generated_repo_artifacts()
     cleanup_legacy_repo_smoke_dirs()
     temp_root = create_smoke_workspace()
     try:
         clone_root = build_temp_repo(temp_root)
-        python_path = Path(sys.executable).resolve()
+        python_path = runtime_python_path()
 
         env = dict(os.environ)
         env["PYTHONDONTWRITEBYTECODE"] = "1"

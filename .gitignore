@@ -28,9 +28,21 @@ pytest-cache-files-*/
 .mypy_cache/
 .venv/
 venv/
+.python-version
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
+uv.lock
+
+# Editors
+.vscode/
+.idea/
+*.code-workspace
+
+# Shell environment
+.envrc
+.direnv/
 
 # R
 .Rhistory

@@ -95,3 +95,10 @@ def test_cleanup_legacy_repo_smoke_dirs_reports_failures(monkeypatch):
         assert stale.exists()
     finally:
         cleanup_temp_root(temp_root)
+
+
+def test_runtime_python_path_uses_onboard_probe(monkeypatch, tmp_path):
+    fake_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+    monkeypatch.setattr(smoke, "reported_python_path", lambda: str(fake_python))
+
+    assert smoke.runtime_python_path() == fake_python
