@@ -35,20 +35,21 @@ def bash_canonical_state_dir(*, env: dict[str, str]) -> str:
 
 
 @pytest.mark.parametrize("env_overrides,system_name", [
-    # env-var override path — should bypass platform detection
     (
         {"AI_ASSET_PRICING_STATE_DIR": "/tmp/test-state"},
         "Linux",
     ),
-    # Linux XDG default (no XDG_STATE_HOME set)
     (
         {"HOME": "/home/testuser"},
         "Linux",
     ),
-    # Linux XDG_STATE_HOME override
     (
         {"HOME": "/home/testuser", "XDG_STATE_HOME": "/custom/state"},
         "Linux",
+    ),
+    (
+        {"HOME": "/Users/testuser"},
+        "Darwin",
     ),
 ])
 def test_state_dir_parity(env_overrides, system_name):
@@ -56,16 +57,23 @@ def test_state_dir_parity(env_overrides, system_name):
     if sys.platform == "win32" and system_name != "Windows":
         pytest.skip("Cannot test non-Windows bash paths on Windows")
 
-    # Python result
     py_dirs = canonical_directories(env=env_overrides, system_name=system_name)
     py_state = str(py_dirs["state_dir"])
 
-    # Bash result — start with a clean env, then apply overrides
     bash_env = {"PATH": os.environ.get("PATH", "")}
-    for key in ("AI_ASSET_PRICING_STATE_DIR", "XDG_STATE_HOME", "HOME",
-                "LOCALAPPDATA", "USERPROFILE", "APPDATA"):
+    for key in (
+        "AI_ASSET_PRICING_STATE_DIR",
+        "AI_ASSET_PRICING_SYSTEM_NAME",
+        "EMPIRICAL_CLAUDE_STATE_DIR",
+        "XDG_STATE_HOME",
+        "HOME",
+        "LOCALAPPDATA",
+        "USERPROFILE",
+        "APPDATA",
+    ):
         bash_env.pop(key, None)
     bash_env.update(env_overrides)
+    bash_env["AI_ASSET_PRICING_SYSTEM_NAME"] = system_name
     bash_state = bash_canonical_state_dir(env=bash_env)
 
     assert py_state == bash_state, (

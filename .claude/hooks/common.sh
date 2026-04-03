@@ -12,32 +12,57 @@ resolve_repo_root() {
 
 
 canonical_state_dir() {
+  local app_name="ai-asset-pricing"
+  if [[ -n "${AI_ASSET_PRICING_STATE_DIR:-}" ]]; then
+    printf '%s\n' "$AI_ASSET_PRICING_STATE_DIR"
+    return 0
+  fi
+
+  # Keep the previous env var working as a local compatibility fallback.
   if [[ -n "${EMPIRICAL_CLAUDE_STATE_DIR:-}" ]]; then
     printf '%s\n' "$EMPIRICAL_CLAUDE_STATE_DIR"
     return 0
   fi
 
-  local uname_s=""
-  uname_s=$(uname -s 2>/dev/null || echo "")
+  local system_name="${AI_ASSET_PRICING_SYSTEM_NAME:-}"
+  if [[ -z "$system_name" ]]; then
+    local uname_s=""
+    uname_s=$(uname -s 2>/dev/null || echo "")
 
-  if [[ "$uname_s" == Darwin ]]; then
-    printf '%s\n' "${HOME}/Library/Application Support/empirical-claude/state"
+    if [[ "$uname_s" == Darwin ]]; then
+      system_name="Darwin"
+    elif [[ "$uname_s" == MINGW* || "$uname_s" == MSYS* || "$uname_s" == CYGWIN* || "${OS:-}" == Windows_NT ]]; then
+      system_name="Windows"
+    else
+      system_name="Linux"
+    fi
+  fi
+
+  local home_dir=""
+  if [[ "$system_name" == "Windows" ]]; then
+    home_dir="${USERPROFILE:-${HOME:-}}"
+  else
+    home_dir="${HOME:-}"
+  fi
+
+  if [[ "$system_name" == "Darwin" ]]; then
+    printf '%s\n' "${home_dir}/Library/Application Support/${app_name}/state"
     return 0
   fi
 
-  if [[ "$uname_s" == MINGW* || "$uname_s" == MSYS* || "$uname_s" == CYGWIN* || "${OS:-}" == Windows_NT ]]; then
+  if [[ "$system_name" == "Windows" ]]; then
     if [[ -n "${LOCALAPPDATA:-}" ]]; then
-      printf '%s\n' "${LOCALAPPDATA}/empirical-claude"
+      printf '%s\n' "${LOCALAPPDATA}/${app_name}"
     else
-      printf '%s\n' "${HOME}/AppData/Local/empirical-claude"
+      printf '%s\n' "${home_dir}/AppData/Local/${app_name}"
     fi
     return 0
   fi
 
   if [[ -n "${XDG_STATE_HOME:-}" ]]; then
-    printf '%s\n' "${XDG_STATE_HOME}/empirical-claude"
+    printf '%s\n' "${XDG_STATE_HOME}/${app_name}"
   else
-    printf '%s\n' "${HOME}/.local/state/empirical-claude"
+    printf '%s\n' "${home_dir}/.local/state/${app_name}"
   fi
 }
 
