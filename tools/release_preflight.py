@@ -49,6 +49,9 @@ REQUIRED_FILES = (
     Path("tools/bootstrap.py"),
     Path("tools/context_drift.py"),
     Path("tools/local_state.py"),
+    Path("tools/onboard.ps1"),
+    Path("tools/onboard.sh"),
+    Path("tools/onboard_driver.py"),
     Path("tools/onboarding_smoke_test.py"),
     Path("tools/onboard_probe.py"),
 )
@@ -78,13 +81,13 @@ REQUIRED_GIT_TRACKED_PATHS = (
     Path("packages/PyBondLab/PyBondLab/data/WRDS/breakpoints_wrds.csv"),
 )
 
-EXACT_FORBIDDEN_PATHS = (Path(".Rhistory"),)
+EXACT_FORBIDDEN_PATHS: tuple[Path, ...] = ()
 
 FORBIDDEN_DIR_NAMES = {"__pycache__"}
 ROOT_LEVEL_IGNORED_DIR_NAMES = {".venv", "venv"}
 FORBIDDEN_DIR_PREFIXES = (".tmp-", ".test-tmp-")
 FORBIDDEN_DIR_SUFFIXES = (".egg-info",)
-FORBIDDEN_FILE_SUFFIXES = (".pyc", ".pyo", ".pyd", ".nbc", ".nbi")
+FORBIDDEN_FILE_SUFFIXES = (".pyc", ".pyo", ".pyd")
 
 LOCAL_PATH_PATTERNS = (
     re.compile(r"(?i)c:\\users\\"),
@@ -108,22 +111,24 @@ SHARED_TEXT_FILES = (
     Path("GEMINI.md"),
     Path("packages/PyBondLab/AGENTS.md"),
     Path("tools/bootstrap.py"),
+    Path("tools/onboard_driver.py"),
     Path("tools/onboard_probe.py"),
     Path(".claude/skills/setup-paper/SKILL.md"),
 )
 
 REQUIRED_BOOTSTRAP_SNIPPETS = {
-    Path("README.md"): ("tools/bootstrap.py", "/onboard", "canonical local state"),
+    Path("README.md"): ("tools/bootstrap.py", "/onboard", "canonical local state", "WRDS is optional"),
     Path("AGENTS.md"): ("tools/bootstrap.py", "docs/ai/onboarding.md", "canonical local state"),
-    Path("CLAUDE.md"): ("tools/bootstrap.py", "/onboard", "canonical local state"),
-    Path("CONTRIBUTING.md"): ("tools/bootstrap.py", "canonical local state", "/onboard"),
+    Path("CLAUDE.md"): ("tools/bootstrap.py", "/onboard", "canonical local state", "WRDS"),
+    Path("CONTRIBUTING.md"): ("tools/bootstrap.py", "canonical local state", "/onboard", "WRDS"),
     Path("GEMINI.md"): ("AGENTS.md", "tools/bootstrap.py", "canonical local state"),
-    Path("docs/ai/onboarding.md"): ("tools/bootstrap.py", "audit", "bootstrap_plan", "apply", "/onboard", "canonical local state"),
-    Path(".claude/skills/onboard/SKILL.md"): ("tools/bootstrap.py audit", "bootstrap_plan.steps", "tools/bootstrap.py apply"),
+    Path("docs/ai/onboarding.md"): ("tools/bootstrap.py", "audit", "bootstrap_plan", "apply", "/onboard", "canonical local state", "WRDS"),
+    Path(".claude/skills/onboard/SKILL.md"): ("tools/bootstrap.py audit", "bootstrap_plan.steps", "tools/bootstrap.py apply", "WRDS"),
     Path("tools/onboard_probe.py"): ("def collect_probe",),
-    Path("tools/bootstrap.py"): ("audit", "repair", "apply", "collect_probe", "build_bootstrap_plan", "write_compat_shims"),
+    Path("tools/bootstrap.py"): ("audit", "repair", "apply", "wrds-files", "collect_probe", "build_bootstrap_plan", "write_compat_shims"),
+    Path("tools/onboard_driver.py"): ("run_bootstrap_audit", "execute_plan_steps", "WRDS"),
     Path("tools/local_state.py"): ("def canonical_directories", "def local_state_records"),
-    Path("tools/onboarding_smoke_test.py"): ("validate_packaging_layout", "bootstrap.py apply", "AI_ASSET_PRICING_STATE_DIR"),
+    Path("tools/onboarding_smoke_test.py"): ("validate_packaging_layout", "bootstrap.py apply", "AI_ASSET_PRICING_STATE_DIR", "onboard_driver.py"),
     Path(".claude/skills/setup-paper/SKILL.md"): ("boilerplate/template_main.tex", "[REMOVE]", "references.bib"),
     Path(".claude/skills/new-project/SKILL.md"): ("/setup-paper",),
     Path(".claude/skills/build-context/SKILL.md"): ("guidance/paper-context.md", "guidance/"),

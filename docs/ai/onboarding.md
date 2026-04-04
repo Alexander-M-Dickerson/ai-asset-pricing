@@ -1,7 +1,15 @@
 # Shared Onboarding
 
-This repo has one repo-local onboarding engine for Claude Code, Codex, and Gemini CLI:
-`tools/bootstrap.py`.
+This repo has one shared Python-level onboarding engine for Claude Code,
+Codex, and Gemini CLI: `tools/bootstrap.py`.
+
+For cold-start machines, the repo-local shell entrypoints are:
+
+- `tools/onboard.ps1`
+- `tools/onboard.sh`
+
+Those shell entrypoints should find or install Python 3.11+, then hand off to
+`tools/onboard_driver.py`, which runs the shared `tools/bootstrap.py` flow.
 
 ## Canonical Local State
 
@@ -32,12 +40,13 @@ For normal agent use, the user should not need to type these commands by hand.
 They should ask the agent to onboard or set up the repo, and the agent should
 run this shared flow on their behalf.
 
-1. Find a working Python interpreter.
-2. Run `<python> tools/bootstrap.py audit`.
-3. Execute the required shell-specific commands listed in the audit report's `bootstrap_plan`.
-4. Run `<python> tools/bootstrap.py apply`.
-5. Re-run `<python> tools/bootstrap.py audit`.
-6. Treat `<python> tools/bootstrap.py repair --write-canonical-state` as an optional convenience for direct local terminals, not the primary agent path.
+1. Find or install a working Python 3.11+ interpreter.
+2. Ask once whether the user has WRDS and wants it configured now.
+3. Run `<python> tools/bootstrap.py audit --json`.
+4. Execute the emitted `bootstrap_plan.steps` for the current shell.
+5. Run `<python> tools/bootstrap.py apply`.
+6. Re-run `<python> tools/bootstrap.py audit`.
+7. Treat `<python> tools/bootstrap.py repair --write-canonical-state` as an optional convenience for direct local terminals, not the primary agent path.
 
 On Windows, if bare `python` hits the Store shim or the wrong install, use the
 exact interpreter path reported by `tools/bootstrap.py audit`. `py` is optional,
@@ -45,9 +54,9 @@ not required.
 
 ## Tool-Specific Entry Points
 
-- Claude Code users: clone the repo, ask Claude to onboard the repo, and let `/onboard` wrap the shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
-- Codex users: clone the repo, ask Codex in chat to onboard or set up the repo, and have it run the same shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
-- Gemini CLI users: clone the repo, ask Gemini CLI to onboard or set up the repo, and have it run the same shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow. Read `GEMINI.md` for Gemini-specific notes.
+- Claude Code users: clone the repo, ask Claude to onboard the repo, and let `/onboard` wrap the cold-start shell entrypoint plus the shared bootstrap `audit` -> execute bootstrap plan -> `apply` -> `audit` flow.
+- Codex users: clone the repo, ask Codex in chat to onboard or set up the repo, and have it run the same cold-start shell entrypoint plus shared bootstrap flow.
+- Gemini CLI users: clone the repo, ask Gemini CLI to onboard or set up the repo, and have it run the same cold-start shell entrypoint plus shared bootstrap flow. Read `GEMINI.md` for Gemini-specific notes.
 
 ## Underlying Probe
 
@@ -59,10 +68,13 @@ primary onboarding entry point.
 
 `tools/bootstrap.py audit` is the source of truth for what still needs to run.
 If the repo is not ready yet, the audit report should emit a `bootstrap_plan`
-with exact PowerShell/native and Bash commands for:
+with exact PowerShell/native and Bash commands plus phase metadata for:
 
+- missing core shell/runtime tools
 - missing Python packages
 - missing or external repo package installs
+- optional WRDS setup
+- optional writing/R setup
 - refreshing canonical external local state
 - rerunning the audit at the end
 
@@ -74,13 +86,15 @@ agent runtime to request any needed approvals for package installation.
 - Never assume bare `python` or `pip` are safe on Windows.
 - Claude hook automation requires `bash` on `PATH`; on Windows, Git Bash is the expected setup.
 - Prefer `uv pip install --python <path>` when uv is available; fall back to `<path> -m pip install`.
+- Prefer `tools/onboard.ps1` / `tools/onboard.sh` plus `tools/onboard_driver.py` for true cold-start onboarding.
 - If canonical local state is missing, create it before relying on machine-specific commands.
 - Prefer `tools/bootstrap.py audit`, its emitted `bootstrap_plan`, and `tools/bootstrap.py apply` over ad hoc local file generation.
 - Keep `tools/bootstrap.py repair --write-canonical-state` as a convenience fallback for unsandboxed local terminals.
-- `tools/release_preflight.py --strict` auto-cleans repo temp artifacts such as `.tmp-*`, `.test-tmp-*`, and `__pycache__`, and it tolerates gitignored repo-root virtual environments such as `.venv/`. It still treats `.Rhistory` and repo-root compatibility shims as release blockers.
+- `tools/release_preflight.py --strict` auto-cleans repo temp artifacts such as `.tmp-*`, `.test-tmp-*`, and `__pycache__`, and it tolerates gitignored repo-root local artifacts such as `.venv/`, `venv/`, and `.Rhistory`. It still treats repo-root compatibility shims as release blockers.
 - If the repo lives in Dropbox/OneDrive, keep canonical local state external and avoid repo-root compatibility shims unless the working copy is private to one machine.
 - Dropbox/OneDrive are supported sync layers, not a substitute for Git merge/conflict handling on the same tracked code/config files.
-- If WRDS access is missing, record the missing pieces explicitly but treat onboarding as complete. WRDS is optional — only needed for data extraction workflows.
+- WRDS is optional. Ask once whether the user has a WRDS account and wants it configured now. If the answer is no, skip WRDS setup and still treat onboarding as complete once the base repo is ready.
+- If WRDS is requested, use `tools/bootstrap.py wrds-files` with a password env var to write `pg_service.conf` / `.pgpass` without echoing the password.
 
 ## Claude Code Permissions and `settings.local.json`
 

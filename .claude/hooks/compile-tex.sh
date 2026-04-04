@@ -43,6 +43,11 @@ if [[ -n "$FOUND" && -x "$FOUND" ]]; then
   PDFLATEX="$FOUND"
 fi
 
+FOUND=$(local_env_tool_path "$REPO_ROOT" "bibtex" 2>/dev/null || true)
+if [[ -n "$FOUND" && -x "$FOUND" ]]; then
+  BIBTEX="$FOUND"
+fi
+
 if [[ "$PDFLATEX" != "pdflatex" ]]; then
   PDFLATEX_DIR=$(cd "$(dirname "$PDFLATEX")" && pwd)
   if [[ -x "$PDFLATEX_DIR/bibtex" ]]; then

@@ -7,9 +7,11 @@ Thank you for your interest in contributing to this project.
 1. Clone the repository.
 2. Ask your agent to onboard the repo. In Claude Code the standard entry point
    is `/onboard`; in Codex and Gemini CLI, ask in chat.
-3. Under the hood, the agent runs `tools/bootstrap.py audit`, executes the emitted bootstrap plan
-   commands, then runs `tools/bootstrap.py apply` to write canonical local state
-   to a per-user external directory outside the repo.
+3. Under the hood, the agent should use the cold-start shell driver
+   (`tools/onboard.ps1` or `tools/onboard.sh`) to find or install Python 3.11+,
+   then let `tools/onboard_driver.py` run `tools/bootstrap.py audit`, execute
+   the emitted bootstrap plan commands, and run `tools/bootstrap.py apply` to
+   write canonical local state to a per-user external directory outside the repo.
 
 Canonical local state (tool paths, WRDS config, etc.) lives outside the repo so
 that shared synced folders (Dropbox, OneDrive) stay safe for multi-user
@@ -18,6 +20,10 @@ collaboration. The paths are OS-specific and reported by `tools/bootstrap.py aud
 Repo-root compatibility shims (`LOCAL_ENV.md`, `CLAUDE.local.md`,
 `.claude/settings.local.json`) are legacy files. Do not create them in synced
 folders -- they leak machine-specific state to other users.
+
+WRDS is optional. The agent should ask once whether the user has a WRDS account.
+If the answer is no, onboarding should skip WRDS setup and still complete once
+the base repo is usable.
 
 ## Synced Folders (OneDrive, Dropbox)
 
@@ -39,8 +45,8 @@ If the repo lives in a synced folder:
 - Open a pull request against `main`.
 
 Strict preflight auto-cleans repo temp artifacts and tolerates gitignored
-repo-root virtual environments such as `.venv/`, but it still expects the repo
-to be free of `.Rhistory` and repo-root compatibility shims.
+repo-root local artifacts such as `.venv/`, `venv/`, and `.Rhistory`, but it
+still expects the repo to be free of repo-root compatibility shims.
 
 ## Code Style
 

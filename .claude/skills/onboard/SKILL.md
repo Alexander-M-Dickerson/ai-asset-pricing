@@ -1,14 +1,18 @@
 ---
 name: onboard
-description: "Thin wrapper over tools/bootstrap.py for first-run local setup. Discover Python, run the shared bootstrap audit plan, execute the required setup commands, and refresh machine-local files."
+description: "Agent-driven cold-start onboarding. Use the repo shell entrypoint to find or install Python 3.11+, then run the shared bootstrap audit/plan/apply flow and configure WRDS only if the user has it."
 argument-hint: "[wrds-username (optional)]"
 ---
 
 # User Onboarding
 
-Use the shared repo-local bootstrap engine in `tools/bootstrap.py`. This skill
-is only a wrapper around that flow; do not duplicate bootstrap logic here when
-the script already handles it.
+Use the shared repo-local onboarding flow:
+
+1. `tools/onboard.ps1` or `tools/onboard.sh` for the pre-Python cold-start step
+2. `tools/onboard_driver.py` for agent orchestration once Python exists
+3. `tools/bootstrap.py` as the shared Python-level audit/plan/apply engine
+
+Do not duplicate bootstrap logic here when the repo scripts already handle it.
 
 ## Hard Rules
 
@@ -21,74 +25,70 @@ the script already handles it.
 - Let `tools/bootstrap.py apply` manage canonical local state. Use `--write-compat-shims` only for private single-user backward compatibility.
 - If an install path needs admin privileges or a missing package manager, stop and give exact instructions.
 - If a bootstrap-plan command needs approval, request it and continue with that exact command.
+- Ask once whether the user has a WRDS account and wants it configured now. If the answer is no, skip WRDS setup and still treat onboarding as complete once the base repo is ready.
 - Treat SSH key setup as optional for basic PostgreSQL access.
 - Never use `conda install` for system tools (psql, pdflatex, R, git). Use the OS package manager (winget/brew/apt). Conda is for Python packages only.
 
 ## Workflow
 
-### 1. Find Python
+### 1. Start With The Shell Entry Point
 
-Find a working interpreter first:
+Use the repo-local shell entrypoint, not `tools/bootstrap.py` directly, when the
+machine may not have Python yet.
 
-```bash
-OS=$(uname -s 2>/dev/null || echo "unknown")
-
-PYTHON=""
-if [[ "$OS" == MINGW* || "$OS" == MSYS* ]]; then
-  for p in \
-    "$HOME/anaconda3/python.exe" \
-    "$HOME/miniforge3/python.exe" \
-    "$HOME/miniconda3/python.exe" \
-    "/c/ProgramData/anaconda3/python.exe" \
-    "/c/ProgramData/miniconda3/python.exe"; do
-    if [[ -x "$p" ]]; then
-      PYTHON="$p"
-      break
-    fi
-  done
-fi
-
-if [[ -z "$PYTHON" ]]; then
-  for name in python3 python; do
-    CAND=$(which "$name" 2>/dev/null)
-    if [[ -n "$CAND" ]] && [[ "$CAND" != *"/WindowsApps/"* ]]; then
-      "$CAND" --version >/dev/null 2>&1 && { PYTHON="$CAND"; break; }
-    fi
-  done
-fi
-
-echo "PYTHON=$PYTHON"
-[[ -n "$PYTHON" ]] && "$PYTHON" --version 2>&1 | head -1 || true
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/onboard.ps1
 ```
 
-If no interpreter is found, recommend Miniforge, stop, and give the exact
-install command for the current platform.
+```bash
+bash tools/onboard.sh
+```
 
-### 2. Audit With The Shared Engine
+Those entrypoints should:
 
-Run:
+- find a usable Python 3.11+ interpreter
+- install Miniforge automatically when no acceptable Python exists and a
+  supported installer path is available
+- hand off to `tools/onboard_driver.py`
+
+If the package manager or installer path is unavailable, stop and give the
+exact manual Miniforge command for the current platform.
+
+### 2. Resolve WRDS Scope Once
+
+If the user already answered in chat, pass that through to the driver. If not,
+ask once:
+
+- `Do you have a WRDS account and want it configured now?`
+
+Outcomes:
+
+- `yes`: collect username when needed, create WRDS files, and run live WRDS checks
+- `no`: skip WRDS setup entirely
+- later / declined: also skip WRDS setup entirely
+
+WRDS is optional. Lack of a WRDS account must not make onboarding fail.
+
+### 3. Audit With The Shared Engine
+
+Once Python exists, run the shared audit:
 
 ```bash
-"<PYTHON>" tools/bootstrap.py audit
+"<PYTHON>" tools/bootstrap.py audit --json --wrds yes|no
 ```
 
 Read the audit output and summarize the gaps before changing anything.
 
-### 3. Execute The Bootstrap Plan
+### 4. Execute The Bootstrap Plan
 
-After summarizing the audit output, run:
-
-```bash
-"<PYTHON>" tools/bootstrap.py audit --json
-```
-
-Read `bootstrap_plan.steps` from the audit payload and execute each required
-command for the current shell in order.
+Read `bootstrap_plan.steps` from the audit payload and execute each step with
+`auto_run=true` for the current shell in order.
 
 The plan is the source of truth for:
 
-- missing Python packages
-- missing or external repo package installs
+- blocking base-repo setup
+- optional WRDS setup
+- optional writing and R setup
 - `tools/bootstrap.py apply`
 - the final rerun of `tools/bootstrap.py audit`
 
@@ -97,10 +97,10 @@ local terminal without agent approvals, you may use the best-effort convenience
 fallback:
 
 ```bash
-"<PYTHON>" tools/bootstrap.py repair --write-canonical-state
+"<PYTHON>" tools/bootstrap.py repair --write-canonical-state --wrds yes|no
 ```
 
-### 4. Manual Gaps The Shared Engine Cannot Finish Alone
+### 5. Manual Gaps The Shared Engine Cannot Finish Alone
 
 If the bootstrap plan or fallback repair step cannot install Python packages automatically:
 
@@ -122,27 +122,26 @@ cd packages/PyBondLab && uv pip install --no-compile --python "<PYTHON>" -e ".[p
 cd packages/PyBondLab && "<PYTHON>" -m pip install --no-compile -e ".[performance]"
 ```
 
-If `psql` is missing, onboarding is **still complete**. psql is only needed for
-WRDS data extraction — PyBondLab, LaTeX, and local-data workflows work without it.
+If `psql` is missing and the user said `no` to WRDS, onboarding can still be
+complete. `psql` is only needed for WRDS data extraction.
 
 If the user wants WRDS access later, recommend:
 
-- **Windows**: Download the PostgreSQL zip archive from postgresql.org and extract
-  to `~/tools/pgsql/` (the probe already checks this path).
+- **Windows**: Download the PostgreSQL zip archive from postgresql.org and extract to `~/tools/pgsql/` (the probe already checks this path).
 - **macOS**: `brew install libpq`
 - **Linux**: `apt install postgresql-client` or `dnf install postgresql`
 
 Then rerun:
 
 ```bash
-"<PYTHON>" tools/bootstrap.py audit
+"<PYTHON>" tools/bootstrap.py audit --wrds yes
 ```
 
 > **NEVER use conda to install psql, PostgreSQL, LaTeX, or other system tools.**
-> Conda's dependency solver hangs on these packages and can corrupt the
-> Python environment. Conda is for Python packages only.
+> Conda's dependency solver hangs on these packages and can corrupt the Python
+> environment. Conda is for Python packages only.
 
-If WRDS files are missing, create or repair:
+If WRDS is enabled and files are missing, create or repair:
 
 1. `~/.pg_service.conf`
 2. `~/.pgpass`
@@ -150,45 +149,29 @@ If WRDS files are missing, create or repair:
 
 Use the username from `$ARGUMENTS` if provided, otherwise ask once. If
 `~/.pgpass` is missing, ask for the WRDS password and do not echo it back.
-
-> **DUO 2FA:** The first `psql service=wrds` connection from a new IP triggers
-> a DUO push notification. **Tell the user to check their phone** and approve it.
-> The connection will time out (~60s) if not approved. This is the #1 cause of
-> "connection timed out" on first setup.
-
-When testing WRDS connectivity, use a date range guaranteed to have data (e.g., 2022).
-Do NOT use the current year — WRDS data loading can lag by months. A query returning
-0 rows is NOT a valid connectivity confirmation.
-
-Example: `psql service=wrds -c "SELECT COUNT(*) FROM crsp.dsi WHERE date >= '2022-01-01' AND date < '2023-01-01';"`
-Expected: ~251 rows (trading days in 2022).
-
-`~/.pg_service.conf`
-
-```ini
-[wrds]
-host=wrds-pgdata.wharton.upenn.edu
-port=9737
-dbname=wrds
-user=THEIR_USERNAME
-```
-
-`~/.pgpass`
-
-```text
-wrds-pgdata.wharton.upenn.edu:9737:wrds:THEIR_USERNAME:THEIR_PASSWORD
-```
-
-Then:
+Prefer the shared helper:
 
 ```bash
-chmod 600 ~/.pgpass
+AI_ASSET_PRICING_WRDS_PASSWORD="<SECRET>" "<PYTHON>" tools/bootstrap.py wrds-files --username THEIR_USERNAME
 ```
 
-On Windows, also copy both files to `$APPDATA/postgresql/` if libpq on that
-machine expects them there.
+> **DUO 2FA:** The first `psql service=wrds` connection from a new IP triggers
+> a DUO push notification. Tell the user to check their phone and approve it.
+> The connection will time out if not approved.
 
-### 5. Refresh Local Files Only
+When testing WRDS connectivity, use a date range guaranteed to have data (for
+example 2022). Do not use the current year. A query returning 0 rows is not a
+valid connectivity confirmation.
+
+Example:
+
+```bash
+psql service=wrds -c "SELECT COUNT(*) FROM crsp.dsi WHERE date >= '2022-01-01' AND date < '2023-01-01';"
+```
+
+Expected result: about 251 rows.
+
+### 6. Refresh Local Files Only
 
 If you only need to refresh canonical local state after environment changes, run:
 
@@ -202,20 +185,19 @@ This writes or refreshes canonical external files:
 - `claude.local.md`
 - `settings.local.json`
 
-### 6. Final Summary
+### 7. Final Summary
 
 End with a short status table covering:
 
-- Python
-- Repo packages
-- `psql`
-- WRDS connection
-- LaTeX
+- base repo
+- WRDS
+- writing
 - R
-- SSH key
+- Python
+- repo packages
 
-If psql or WRDS items show as NOT INSTALLED or SKIPPED, reassure the user that
-onboarding is complete — these are optional for WRDS data extraction only.
+If WRDS shows as skipped because the user has no account, say clearly that
+onboarding is still complete once the base repo is ready.
 
 Then list the files written and any remaining manual steps.
 
@@ -224,5 +206,5 @@ Then list the files written and any remaining manual steps.
 Tools like `psql` may not be on the shell `PATH` even when installed. After
 onboarding, always use the absolute paths recorded in canonical local state
 (or a repo-root compatibility shim if one was explicitly generated) rather
-than bare command names. The bootstrap engine
-discovers these paths automatically and writes them to the local files.
+than bare command names. The bootstrap engine discovers these paths
+automatically and writes them to the local files.

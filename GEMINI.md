@@ -8,9 +8,11 @@ and adds Gemini-specific notes.
 ## Gemini-Specific Notes
 
 - Onboarding: ask Gemini CLI to onboard or set up the repo in chat. Under the
-  hood it should run `tools/bootstrap.py audit`, execute the bootstrap plan,
-  then `tools/bootstrap.py apply`. This is the same shared flow as Claude
-  `/onboard` and Codex.
+  hood it should use the same cold-start flow as Claude `/onboard` and Codex:
+  `tools/onboard.ps1` or `tools/onboard.sh` to get Python 3.11+, then
+  `tools/onboard_driver.py`, then `tools/bootstrap.py audit`, the emitted
+  bootstrap plan, and `tools/bootstrap.py apply`. WRDS is optional and should
+  only be configured if the user has an account and wants it set up now.
 - Skills: read `.claude/skills/*/SKILL.md` files directly — they are plain markdown
   instructions, not Claude-binary artifacts. Gemini can follow them as-is.
 - Domain experts: read `.claude/agents/*.md` for deep WRDS, CRSP, OptionMetrics,

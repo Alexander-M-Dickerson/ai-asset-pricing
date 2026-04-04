@@ -60,3 +60,15 @@ def test_collect_probe_uses_reported_python_path(monkeypatch, tmp_path):
 
     assert result["python"]["path"] == fake_python
     assert result["python"]["pip_command"] == f'"{fake_python}" -m pip'
+    assert "bibtex" in result["tools"]
+
+
+def test_detect_bibtex_prefers_pdflatex_sibling(tmp_path):
+    tex_dir = tmp_path / "tex"
+    tex_dir.mkdir()
+    pdflatex = tex_dir / "pdflatex.exe"
+    bibtex = tex_dir / "bibtex.exe"
+    pdflatex.write_text("", encoding="utf-8")
+    bibtex.write_text("", encoding="utf-8")
+
+    assert probe.detect_bibtex(str(pdflatex)) == str(bibtex)

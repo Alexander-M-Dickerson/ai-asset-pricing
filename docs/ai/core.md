@@ -60,7 +60,7 @@ only parallelize operations known to succeed.
 - Use short lowercase data folder names such as `crsp_monthly_sp500`.
 - Keep data global and project code local; do not copy datasets into project folders.
 - Use `tools/release_preflight.py --strict` before publishing shared changes.
-- Strict preflight auto-cleans repo temp artifacts and tolerates gitignored repo-root virtual environments such as `.venv/`, but it still fails on `.Rhistory` and repo-root compatibility shims.
+- Strict preflight auto-cleans repo temp artifacts and tolerates gitignored repo-root local artifacts such as `.venv/`, `venv/`, and `.Rhistory`, but it still fails on repo-root compatibility shims.
 - When absolute paths matter, use the canonical local state reported by `tools/bootstrap.py audit`.
 - Run `tools/context_drift.py` to detect stale documentation after code changes.
 - A `SessionStart` hook injects recent activity and drift warnings into every Claude Code session.

@@ -86,7 +86,10 @@ def build_temp_repo(temp_root: Path) -> Path:
     copy_tree(REPO_ROOT / "fintools", clone_root / "fintools")
     copy_tree(REPO_ROOT / "tools" / "bootstrap.py", clone_root / "tools" / "bootstrap.py")
     copy_tree(REPO_ROOT / "tools" / "local_state.py", clone_root / "tools" / "local_state.py")
+    copy_tree(REPO_ROOT / "tools" / "onboard_driver.py", clone_root / "tools" / "onboard_driver.py")
     copy_tree(REPO_ROOT / "tools" / "onboard_probe.py", clone_root / "tools" / "onboard_probe.py")
+    copy_tree(REPO_ROOT / "tools" / "onboard.ps1", clone_root / "tools" / "onboard.ps1")
+    copy_tree(REPO_ROOT / "tools" / "onboard.sh", clone_root / "tools" / "onboard.sh")
     copy_tree(PYBONDLAB_ROOT, clone_root / "packages" / "PyBondLab")
     return clone_root
 
@@ -95,7 +98,7 @@ def smoke_base_dir(env: Mapping[str, str] | None = None) -> Path:
     env = env or os.environ
     override = env.get("AI_ASSET_PRICING_SMOKE_DIR", "").strip()
     if override:
-        return Path(override).expanduser()
+        return Path(override).expanduser().resolve()
     return Path(tempfile.gettempdir())
 
 
@@ -187,6 +190,29 @@ def main() -> int:
         required_plan_ids = {"install_fintools", "install_pybondlab", "apply_local_files", "rerun_audit"}
         if not required_plan_ids.issubset(audit_plan_ids):
             raise RuntimeError("bootstrap audit did not emit the expected bootstrap_plan steps for a fresh clone")
+
+        driver_output = run_command(
+            [
+                str(python_path),
+                "tools/onboard_driver.py",
+                "--wrds",
+                "no",
+                "--skip-wrds-test",
+                "--non-interactive",
+                "--dry-run",
+                "--json",
+            ],
+            cwd=clone_root,
+            env=env,
+        )
+        driver_payload = json.loads(driver_output)
+        if driver_payload.get("shell") not in {"powershell", "bash"}:
+            raise RuntimeError("onboard_driver.py did not report a valid shell")
+        executed_steps = driver_payload.get("executed_steps", [])
+        if not executed_steps or any(step.get("status") != "DRY_RUN" for step in executed_steps):
+            raise RuntimeError("onboard_driver.py dry-run did not preserve plan execution metadata")
+        if driver_payload.get("final_audit", {}).get("wrds_mode", {}).get("effective") != "no":
+            raise RuntimeError("onboard_driver.py did not propagate the WRDS skip decision")
 
         # Smoke-test `tools/bootstrap.py apply` in the temp clone.
         apply_output = run_command(

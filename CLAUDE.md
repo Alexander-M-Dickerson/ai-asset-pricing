@@ -23,8 +23,10 @@ Never commit:
 - `.claude/settings.local.json`
 
 New users should run `/onboard`, which wraps the shared `tools/bootstrap.py`
-flow to discover the environment, execute the required bootstrap-plan commands,
-and create canonical local state outside the repo.
+flow. Under the hood, it should use the cold-start onboarding entrypoint to
+find or install Python 3.11+, ask whether WRDS should be configured now, then
+execute the bootstrap-plan commands and create canonical local state outside
+the repo. WRDS is optional.
 
 ## Shared Python Package
 
@@ -70,7 +72,7 @@ Read these files before broad repo changes:
 
 ### Data and WRDS
 
-- `/onboard` - thin wrapper over `tools/bootstrap.py audit`, the emitted bootstrap plan commands, `tools/bootstrap.py apply`, and a final `audit`
+- `/onboard` - cold-start wrapper over `tools/onboard.ps1` / `tools/onboard.sh`, then `tools/onboard_driver.py`, then the shared `tools/bootstrap.py` audit/plan/apply/audit flow
 - `/wrds-psql` - PostgreSQL query to Parquet plus `metadata.json`
 - `/wrds-schema` - preload WRDS schema knowledge
 - `/wrds-ssh` - SSH, SAS jobs, and WRDS file transfer

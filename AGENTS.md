@@ -14,18 +14,21 @@ should live in `docs/ai/`. Gemini CLI uses `GEMINI.md` which imports this file.
 - Treat repo-root `LOCAL_ENV.md` / `CLAUDE.local.md` as optional compatibility shims, not the source of truth.
 - Never commit `LOCAL_ENV.md`, `CLAUDE.local.md`, or `.claude/settings.local.json`.
 - Run `tools/release_preflight.py --strict` before a shared release.
-- Strict preflight auto-cleans repo temp artifacts and tolerates gitignored repo-root virtual environments such as `.venv/`, but `.Rhistory` and repo-root compatibility shims still block a release-ready tree.
+- Strict preflight auto-cleans repo temp artifacts and tolerates gitignored repo-root local artifacts such as `.venv/`, `venv/`, and `.Rhistory`, but repo-root compatibility shims still block a release-ready tree.
 - Gemini CLI uses `GEMINI.md` which imports this file. See `GEMINI.md` for Gemini-specific notes.
 
 ## Task Routing
 
 - Setup, onboarding, tool paths, or first-run issues:
   - Read `docs/ai/onboarding.md`
+  - Prefer `tools/onboard.ps1` or `tools/onboard.sh` for true cold-start onboarding
+  - Use `tools/onboard_driver.py` after Python exists
   - Use `tools/bootstrap.py audit`
   - Execute the required commands from the audit report's `bootstrap_plan`
   - Use `tools/bootstrap.py apply`
   - Treat `tools/bootstrap.py repair --write-canonical-state` as a direct-terminal fallback, not the primary Codex path
   - Treat `tools/onboard_probe.py` as the shared probe implementation, not the user-facing entry point
+  - Ask once whether the user has WRDS and wants it configured now; WRDS is optional and onboarding can still succeed without it
   - Use repo-root compatibility shims only if they were explicitly generated for a private single-user working copy
 - WRDS, data extraction, or query pipelines:
   - Read `docs/ai/wrds.md`

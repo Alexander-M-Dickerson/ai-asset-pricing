@@ -14,12 +14,16 @@ sys.dont_write_bytecode = True
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Each tuple: (source_glob, doc_file)
-# Verified against actual file contents — see plan for line-number references.
+# Verified against actual file contents - see plan for line-number references.
 DRIFT_MAP: list[tuple[str, str]] = [
-    # docs/ai/onboarding.md references tools/bootstrap.py, onboard_probe.py, local_state.py
+    # docs/ai/onboarding.md references the onboarding engine, drivers, probe, and local state
     ("tools/bootstrap.py", "docs/ai/onboarding.md"),
+    ("tools/onboard_driver.py", "docs/ai/onboarding.md"),
+    ("tools/onboard.ps1", "docs/ai/onboarding.md"),
+    ("tools/onboard.sh", "docs/ai/onboarding.md"),
     ("tools/onboard_probe.py", "docs/ai/onboarding.md"),
     ("tools/local_state.py", "docs/ai/onboarding.md"),
+    (".claude/skills/onboard/SKILL.md", "docs/ai/onboarding.md"),
     # docs/ai/core.md references fintools/, .claude/hooks/, tools/release_preflight.py
     ("fintools/**/*.py", "docs/ai/core.md"),
     (".claude/hooks/*.sh", "docs/ai/core.md"),
@@ -47,8 +51,11 @@ DRIFT_MAP: list[tuple[str, str]] = [
     # CLAUDE.md must reflect docs/ai/
     ("docs/ai/core.md", "CLAUDE.md"),
     ("docs/ai/onboarding.md", "CLAUDE.md"),
+    # Claude onboarding skill must reflect the shared onboarding doc
+    ("docs/ai/onboarding.md", ".claude/skills/onboard/SKILL.md"),
     # CONTRIBUTING.md must reflect onboarding and bootstrap
     ("tools/bootstrap.py", "CONTRIBUTING.md"),
+    ("tools/onboard_driver.py", "CONTRIBUTING.md"),
     ("docs/ai/onboarding.md", "CONTRIBUTING.md"),
     # GEMINI.md imports AGENTS.md and must stay in sync
     ("AGENTS.md", "GEMINI.md"),
@@ -92,7 +99,7 @@ def last_commit_epoch(pattern: str) -> int | None:
         return None
 
 
-def check_drift() -> list[dict[str, object]]:
+def check_drift(threshold_days: float = DRIFT_THRESHOLD_DAYS) -> list[dict[str, object]]:
     """Return a list of drift warnings."""
     warnings: list[dict[str, object]] = []
     for source_glob, doc_file in DRIFT_MAP:
@@ -102,7 +109,7 @@ def check_drift() -> list[dict[str, object]]:
             continue
         if source_epoch > doc_epoch:
             days_stale = (source_epoch - doc_epoch) / 86400
-            if days_stale >= DRIFT_THRESHOLD_DAYS:
+            if days_stale >= threshold_days:
                 warnings.append(
                     {
                         "source": source_glob,
@@ -137,12 +144,18 @@ def print_brief(warnings: list[dict[str, object]]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=DRIFT_THRESHOLD_DAYS,
+        help=f"Minimum staleness in days before flagging (default: {DRIFT_THRESHOLD_DAYS}).",
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--json", action="store_true", help="Emit JSON output.")
     group.add_argument("--brief", action="store_true", help="One-line summary.")
     args = parser.parse_args(argv)
 
-    warnings = check_drift()
+    warnings = check_drift(threshold_days=args.threshold)
 
     if args.json:
         json.dump(warnings, sys.stdout, indent=2)

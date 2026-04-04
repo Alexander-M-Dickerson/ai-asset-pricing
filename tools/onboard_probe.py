@@ -127,6 +127,28 @@ def detect_pdflatex() -> str:
     return ""
 
 
+def detect_bibtex(pdflatex_path: str = "") -> str:
+    if pdflatex_path:
+        pdflatex_dir = Path(pdflatex_path).parent
+        sibling = existing_path(
+            pdflatex_dir / "bibtex",
+            pdflatex_dir / "bibtex.exe",
+        )
+        if sibling:
+            return sibling
+
+    found = which("bibtex")
+    if found:
+        return found
+
+    if os.name == "nt":
+        return existing_path(
+            Path(r"C:\Program Files\MiKTeX\miktex\bin\x64\bibtex.exe"),
+            Path(r"C:\Program Files\MiKTeX\miktex\bin\bibtex.exe"),
+        )
+    return ""
+
+
 def detect_r() -> str:
     found = which("R") or which("Rscript")
     if found:
@@ -143,6 +165,22 @@ def detect_bash() -> str:
     if found and command_succeeds([found, "-lc", "exit 0"]):
         return found
     return ""
+
+
+def detect_installers() -> dict[str, dict[str, str]]:
+    installers: dict[str, dict[str, str]] = {}
+    for label, command in (
+        ("winget", "winget"),
+        ("brew", "brew"),
+        ("apt_get", "apt-get"),
+        ("dnf", "dnf"),
+    ):
+        path = which(command)
+        installers[label] = {
+            "path": path,
+            "version": run_version([path, "--version"]) if path else "",
+        }
+    return installers
 
 
 def read_text(path: Path) -> str:
@@ -218,6 +256,7 @@ def collect_probe() -> dict[str, Any]:
 
     psql_path = detect_psql(home)
     pdflatex_path = detect_pdflatex()
+    bibtex_path = detect_bibtex(pdflatex_path)
     r_path = detect_r()
     git_path = which("git")
     gh_path = which("gh")
@@ -225,6 +264,7 @@ def collect_probe() -> dict[str, Any]:
     bash_path = detect_bash()
     conda_path = which("conda")
     uv_path = which("uv")
+    installers = detect_installers()
 
     result = {
         "platform": {
@@ -254,6 +294,10 @@ def collect_probe() -> dict[str, Any]:
                 "path": pdflatex_path,
                 "version": run_version([pdflatex_path, "--version"]) if pdflatex_path else "",
             },
+            "bibtex": {
+                "path": bibtex_path,
+                "version": run_version([bibtex_path, "--version"]) if bibtex_path else "",
+            },
             "r": {
                 "path": r_path,
                 "version": run_version([r_path, "--version"]) if r_path else "",
@@ -279,6 +323,7 @@ def collect_probe() -> dict[str, Any]:
                 ),
             },
         },
+        "installers": installers,
         "packages": package_versions(),
         "wrds": {
             "pg_service_conf": "OK" if pg_service.exists() else "MISSING",

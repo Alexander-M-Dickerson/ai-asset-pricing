@@ -18,8 +18,13 @@ config inside the shared tree.
 Ask Claude Code to onboard the repo. The standard Claude entry point is
 `/onboard`.
 
-Under the hood, `/onboard` is a thin wrapper over the shared
-`tools/bootstrap.py` engine:
+Under the hood, `/onboard` should drive the shared cold-start flow:
+
+1. use `tools/onboard.ps1` or `tools/onboard.sh` to find or install Python 3.11+
+2. hand off to `tools/onboard_driver.py`
+3. let that driver run the shared `tools/bootstrap.py` engine
+
+The Python-level bootstrap engine is still:
 
 1. `tools/bootstrap.py audit`
 2. execute the emitted `bootstrap_plan`
@@ -28,8 +33,10 @@ Under the hood, `/onboard` is a thin wrapper over the shared
 
 ### Codex and Gemini CLI users
 
-Ask Codex or Gemini CLI in chat to onboard or set up the repo. They should run
-the same shared flow for you, but without the Claude slash command wrapper:
+Ask Codex or Gemini CLI in chat to onboard or set up the repo. They should
+first find or install a working Python interpreter, ask once whether you have
+WRDS, and then run the same shared flow for you without the Claude slash
+command wrapper:
 
 1. `tools/bootstrap.py audit`
 2. execute the required commands from `bootstrap_plan`
@@ -57,6 +64,9 @@ GEMINI.md                              # Gemini adapter
 .claude/                               # Claude-native rules, skills, agents, hooks
 docs/ai/                               # Shared cross-tool context
 tools/bootstrap.py                     # Shared onboarding audit/apply engine
+tools/onboard_driver.py                # Python orchestration layer after Python exists
+tools/onboard.ps1                      # PowerShell cold-start onboarding entrypoint
+tools/onboard.sh                       # Bash cold-start onboarding entrypoint
 tools/onboard_probe.py                 # Shared environment probe implementation
 tools/onboarding_smoke_test.py         # Temp-clone onboarding smoke test
 tools/context_drift.py                 # Documentation drift detector
@@ -68,6 +78,7 @@ packages/PyBondLab/                    # Portfolio construction package
 ## Prerequisites
 
 - Claude Code, Codex, or Gemini CLI
+- Python 3.11+ available somewhere on the machine so the shared bootstrap can run
 - Bash on `PATH` for Claude hook automation and Bash bootstrap commands
 - Windows Claude users should install Git for Windows / Git Bash and ensure
   `bash` is on `PATH`
@@ -127,6 +138,8 @@ chmod 600 ~/.pgpass
 
 ## Without WRDS
 
+WRDS is optional.
+
 The repo is still useful without live WRDS access:
 
 - AI skills, rules, and agents for writing, auditing, and project scaffolding
@@ -135,8 +148,10 @@ The repo is still useful without live WRDS access:
 - LaTeX boilerplate and paper setup
 - local onboarding and release/readiness checks
 
-WRDS is only required for live data extraction, WRDS connectivity checks, and
-running research workflows on real WRDS-backed data.
+The agent should ask once whether the user has a WRDS account. If the answer is
+no, onboarding should skip WRDS setup and still complete successfully once the
+base repo is ready. WRDS is only required for live data extraction, WRDS
+connectivity checks, and running research workflows on real WRDS-backed data.
 
 ## Tool Entry Points
 
@@ -160,8 +175,8 @@ Before publishing shared changes, run:
 ```
 
 Strict preflight auto-cleans repo temp artifacts such as test temp folders and
-`__pycache__`, and it tolerates gitignored repo-root virtual environments such
-as `.venv/`. It still fails if the release tree contains `.Rhistory` or
+`__pycache__`, and it tolerates gitignored repo-root local artifacts such as
+`.venv/`, `venv/`, and `.Rhistory`. It still fails if the release tree contains
 repo-root compatibility shims.
 
 ## Acknowledgements

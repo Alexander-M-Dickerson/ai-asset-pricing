@@ -39,6 +39,8 @@ ROOT_GENERATED_DIR_PREFIXES = (".tmp-", ".test-tmp-")
 WRDS_SMOKE_COUNT_START = "2022-01-01"
 WRDS_SMOKE_COUNT_END = "2023-01-01"
 WRDS_SMOKE_SAMPLE_START = "2022-12-01"
+DEFAULT_WRDS_PASSWORD_ENV = "AI_ASSET_PRICING_WRDS_PASSWORD"
+SUPPORTED_WRDS_MODES = ("auto", "yes", "no")
 
 PACKAGE_INSTALL_SPECS = {
     "pandas": "pandas",
@@ -78,6 +80,89 @@ REPO_PACKAGES = (
         install_cwd=PYBONDLAB_ROOT,
     ),
 )
+
+
+def probe_tool(probe: dict[str, Any], name: str) -> dict[str, str]:
+    return dict(probe.get("tools", {}).get(name, {}))
+
+
+def probe_tool_path(probe: dict[str, Any], name: str) -> str:
+    return probe_tool(probe, name).get("path", "")
+
+
+def probe_installer_path(probe: dict[str, Any], name: str) -> str:
+    return dict(probe.get("installers", {}).get(name, {})).get("path", "")
+
+
+def probe_platform_value(probe: dict[str, Any], key: str) -> str:
+    return str(dict(probe.get("platform", {})).get(key, "") or "")
+
+
+def parse_version_tuple(version: str) -> tuple[int, ...]:
+    parts: list[int] = []
+    for piece in re.split(r"[.+-]", version):
+        if piece.isdigit():
+            parts.append(int(piece))
+        else:
+            break
+    return tuple(parts)
+
+
+def python_is_supported(version: str, minimum: tuple[int, int] = (3, 11)) -> bool:
+    parsed = parse_version_tuple(version)
+    if len(parsed) < 2:
+        return False
+    return parsed[:2] >= minimum
+
+
+def has_wrds_evidence(probe: dict[str, Any]) -> bool:
+    wrds = probe.get("wrds", {})
+    if preferred_pg_service_path(probe).exists():
+        return True
+    if wrds.get("pgpass") == "OK":
+        return True
+    if wrds.get("ssh_config") == "OK" or wrds.get("ssh_key") == "OK":
+        return True
+    return bool(wrds.get("wrds_user"))
+
+
+def resolve_wrds_mode(
+    probe: dict[str, Any],
+    *,
+    requested: str,
+    wrds_username: str = "",
+) -> dict[str, str]:
+    if requested not in SUPPORTED_WRDS_MODES:
+        raise ValueError(f"unsupported WRDS mode: {requested}")
+
+    username = wrds_username.strip() or probe.get("wrds", {}).get("wrds_user", "")
+    if requested == "yes":
+        return {
+            "requested": requested,
+            "effective": "yes",
+            "reason": "requested explicitly",
+            "username": username,
+        }
+    if requested == "no":
+        return {
+            "requested": requested,
+            "effective": "no",
+            "reason": "user does not have WRDS or chose to skip setup",
+            "username": username,
+        }
+    if has_wrds_evidence(probe):
+        return {
+            "requested": requested,
+            "effective": "yes",
+            "reason": "existing WRDS configuration detected on this machine",
+            "username": username,
+        }
+    return {
+        "requested": requested,
+        "effective": "no",
+        "reason": "no local WRDS evidence detected",
+        "username": username,
+    }
 
 
 def run_command(
@@ -158,6 +243,13 @@ def format_shell_command(parts: list[str]) -> str:
     return " ".join(shell_quote(part) for part in parts)
 
 
+def powershell_from_bash(command: str) -> str:
+    return (
+        "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
+        f"{shell_quote(command)}"
+    )
+
+
 def powershell_in_directory(cwd: Path, parts: list[str], *, disable_bytecode: bool = False) -> str:
     inner = format_powershell_command(parts)
     preamble = ""
@@ -184,6 +276,30 @@ def bash_in_directory(cwd: Path, parts: list[str], *, disable_bytecode: bool = F
     cwd_text = shell_quote(display_bash_path(str(cwd)))
     prefix = "PYTHONDONTWRITEBYTECODE=1 " if disable_bytecode else ""
     return f"(cd {cwd_text} && {prefix}{inner})"
+
+
+def make_plan_step(
+    *,
+    step_id: str,
+    label: str,
+    reason: str,
+    powershell: str,
+    bash: str,
+    phase: str,
+    blocking: bool,
+    auto_run: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": step_id,
+        "label": label,
+        "reason": reason,
+        "powershell": powershell,
+        "bash": bash,
+        "phase": phase,
+        "blocking": blocking,
+        "auto_run": auto_run,
+        "required": blocking,
+    }
 
 
 def python_module_probe(python_path: str, import_name: str, *, cwd: Path) -> dict[str, str]:
@@ -401,6 +517,186 @@ def run_wrds_checks(probe: dict[str, Any], *, skip: bool) -> dict[str, Any]:
     return {"status": overall, "checks": checks}
 
 
+def bootstrap_runtime_args(report: dict[str, Any]) -> list[str]:
+    args: list[str] = []
+    options = report.get("options", {})
+    if options.get("skip_wrds_test"):
+        args.append("--skip-wrds-test")
+    args.extend(["--wrds", report.get("wrds_mode", {}).get("requested", "auto")])
+    username = report.get("wrds_mode", {}).get("username", "").strip()
+    if username:
+        args.extend(["--wrds-username", username])
+    return args
+
+
+def windows_command_pair(command: str) -> tuple[str, str]:
+    return command, powershell_from_bash(command)
+
+
+def native_command_pair(command: str) -> tuple[str, str]:
+    return command, command
+
+
+def wrds_files_missing(probe: dict[str, Any]) -> bool:
+    return not preferred_pg_service_path(probe).exists() or probe.get("wrds", {}).get("pgpass") != "OK"
+
+
+def render_pg_service(username: str) -> str:
+    return "\n".join(
+        [
+            "[wrds]",
+            "host=wrds-pgdata.wharton.upenn.edu",
+            "port=9737",
+            "dbname=wrds",
+            f"user={username}",
+            "",
+        ]
+    )
+
+
+def render_pgpass(username: str, password: str) -> str:
+    return f"wrds-pgdata.wharton.upenn.edu:9737:wrds:{username}:{password}\n"
+
+
+def try_restrict_pgpass(path: Path) -> None:
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        return
+
+
+def write_wrds_files(
+    probe: dict[str, Any],
+    *,
+    username: str,
+    password: str,
+) -> list[str]:
+    written: list[str] = []
+    home = Path(probe["platform"]["home"])
+    pg_service_text = render_pg_service(username)
+    pgpass_text = render_pgpass(username, password)
+
+    home_pg_service = home / ".pg_service.conf"
+    home_pgpass = home / ".pgpass"
+    home_pg_service.parent.mkdir(parents=True, exist_ok=True)
+    home_pg_service.write_text(pg_service_text, encoding="utf-8")
+    written.append(str(home_pg_service))
+
+    home_pgpass.parent.mkdir(parents=True, exist_ok=True)
+    home_pgpass.write_text(pgpass_text, encoding="utf-8")
+    try_restrict_pgpass(home_pgpass)
+    written.append(str(home_pgpass))
+
+    appdata = probe_platform_value(probe, "appdata")
+    if probe_platform_value(probe, "system") == "Windows" and appdata:
+        appdata_dir = Path(appdata) / "postgresql"
+        appdata_dir.mkdir(parents=True, exist_ok=True)
+        app_pg_service = appdata_dir / "pg_service.conf"
+        app_pgpass = appdata_dir / "pgpass.conf"
+        app_pg_service.write_text(pg_service_text, encoding="utf-8")
+        app_pgpass.write_text(pgpass_text, encoding="utf-8")
+        try_restrict_pgpass(app_pgpass)
+        written.extend([str(app_pg_service), str(app_pgpass)])
+
+    return written
+
+
+def uv_install_commands(probe: dict[str, Any]) -> tuple[str, str]:
+    system = probe_platform_value(probe, "system")
+    if system == "Windows":
+        command = 'irm https://astral.sh/uv/install.ps1 | iex'
+        return (
+            f"powershell -ExecutionPolicy ByPass -c {powershell_quote(command)}",
+            powershell_from_bash(command),
+        )
+    command = "curl -LsSf https://astral.sh/uv/install.sh | sh"
+    return native_command_pair(command)
+
+
+def bash_install_commands(probe: dict[str, Any]) -> tuple[str, str] | None:
+    system = probe_platform_value(probe, "system")
+    if system == "Windows":
+        if probe_installer_path(probe, "winget"):
+            return windows_command_pair(
+                "winget install --id Git.Git -e --source winget "
+                "--accept-package-agreements --accept-source-agreements"
+            )
+        return None
+    if system == "Darwin":
+        if probe_installer_path(probe, "brew"):
+            return native_command_pair("brew install bash")
+        return None
+    if probe_installer_path(probe, "apt_get"):
+        return native_command_pair("sudo apt-get update && sudo apt-get install -y bash")
+    if probe_installer_path(probe, "dnf"):
+        return native_command_pair("sudo dnf install -y bash")
+    return None
+
+
+def psql_install_commands(probe: dict[str, Any]) -> tuple[str, str] | None:
+    system = probe_platform_value(probe, "system")
+    if system == "Windows":
+        if probe_installer_path(probe, "winget"):
+            return windows_command_pair(
+                "winget install --id PostgreSQL.PostgreSQL -e --source winget "
+                "--accept-package-agreements --accept-source-agreements"
+            )
+        return None
+    if system == "Darwin":
+        if probe_installer_path(probe, "brew"):
+            return native_command_pair("brew install libpq")
+        return None
+    if probe_installer_path(probe, "apt_get"):
+        return native_command_pair("sudo apt-get update && sudo apt-get install -y postgresql-client")
+    if probe_installer_path(probe, "dnf"):
+        return native_command_pair("sudo dnf install -y postgresql")
+    return None
+
+
+def latex_install_commands(probe: dict[str, Any]) -> tuple[str, str] | None:
+    system = probe_platform_value(probe, "system")
+    if system == "Windows":
+        if probe_installer_path(probe, "winget"):
+            return windows_command_pair(
+                "winget install --id MiKTeX.MiKTeX -e --source winget "
+                "--accept-package-agreements --accept-source-agreements"
+            )
+        return None
+    if system == "Darwin":
+        if probe_installer_path(probe, "brew"):
+            return native_command_pair("brew install --cask mactex-no-gui")
+        return None
+    if probe_installer_path(probe, "apt_get"):
+        return native_command_pair(
+            "sudo apt-get update && sudo apt-get install -y texlive-latex-base texlive-bibtex-extra"
+        )
+    if probe_installer_path(probe, "dnf"):
+        return native_command_pair(
+            "sudo dnf install -y texlive-scheme-basic texlive-bibtex"
+        )
+    return None
+
+
+def r_install_commands(probe: dict[str, Any]) -> tuple[str, str] | None:
+    system = probe_platform_value(probe, "system")
+    if system == "Windows":
+        if probe_installer_path(probe, "winget"):
+            return windows_command_pair(
+                "winget install --id RProject.R -e --source winget "
+                "--accept-package-agreements --accept-source-agreements"
+            )
+        return None
+    if system == "Darwin":
+        if probe_installer_path(probe, "brew"):
+            return native_command_pair("brew install r")
+        return None
+    if probe_installer_path(probe, "apt_get"):
+        return native_command_pair("sudo apt-get update && sudo apt-get install -y r-base")
+    if probe_installer_path(probe, "dnf"):
+        return native_command_pair("sudo dnf install -y R")
+    return None
+
+
 def _install_cmd(probe: dict[str, Any], specs: list[str], *, editable: bool = False) -> list[str]:
     """Return the install command list, preferring uv when available."""
     python_path = probe["python"]["path"]
@@ -552,6 +848,7 @@ def build_bootstrap_plan(report: dict[str, Any]) -> dict[str, Any]:
     probe = report["probe"]
     python_path = probe["python"]["path"]
     bash_python = display_bash_path(python_path)
+    runtime_args = bootstrap_runtime_args(report)
     missing_modules = missing_python_modules(probe)
     missing_local_files = [item["path"] for item in report["local_files"] if item["status"] != "OK"]
     steps: list[dict[str, Any]] = []
@@ -564,35 +861,66 @@ def build_bootstrap_plan(report: dict[str, Any]) -> dict[str, Any]:
     ]
     if storage_hint["kind"] == "synced_folder_candidate" and synced_compat_files:
         steps.append(
-            {
-                "id": "remove_synced_compat_shims",
-                "label": "Remove repo-root compat shims from synced folder",
-                "required": True,
-                "reason": (
+            make_plan_step(
+                step_id="remove_synced_compat_shims",
+                label="Remove repo-root compat shims from synced folder",
+                blocking=True,
+                phase="base",
+                reason=(
                     f"Synced folder detected ({storage_hint['provider']}); "
                     f"compat shims leak user-specific state: {', '.join(synced_compat_files)}"
                 ),
-                "powershell": "Remove-Item -Path LOCAL_ENV.md, CLAUDE.local.md, .claude\\settings.local.json -ErrorAction SilentlyContinue",
-                "bash": "rm -f LOCAL_ENV.md CLAUDE.local.md .claude/settings.local.json",
-            }
+                powershell="Remove-Item -Path LOCAL_ENV.md, CLAUDE.local.md, .claude\\settings.local.json -ErrorAction SilentlyContinue",
+                bash="rm -f LOCAL_ENV.md CLAUDE.local.md .claude/settings.local.json",
+            )
+        )
+
+    if not probe_tool_path(probe, "bash"):
+        commands = bash_install_commands(probe)
+        if commands:
+            steps.append(
+                make_plan_step(
+                    step_id="install_bash",
+                    label="Install Bash or Git Bash",
+                    blocking=True,
+                    phase="base",
+                    reason="Bash is required for Claude hook automation and Bash bootstrap commands.",
+                    powershell=commands[0],
+                    bash=commands[1],
+                )
+            )
+
+    if not probe_tool_path(probe, "uv"):
+        uv_ps, uv_bash = uv_install_commands(probe)
+        steps.append(
+            make_plan_step(
+                step_id="install_uv",
+                label="Install uv",
+                blocking=False,
+                phase="base",
+                reason="uv is optional but preferred for faster package installs.",
+                powershell=uv_ps,
+                bash=uv_bash,
+            )
         )
 
     if missing_modules:
         specs = [PACKAGE_INSTALL_SPECS[name] for name in missing_modules]
         ps_parts, bash_parts = _plan_install_parts(probe, specs)
         steps.append(
-            {
-                "id": "install_python_packages",
-                "label": "Install missing Python packages",
-                "required": True,
-                "reason": f"Missing packages: {', '.join(missing_modules)}",
-                "powershell": powershell_in_directory(
+            make_plan_step(
+                step_id="install_python_packages",
+                label="Install missing Python packages",
+                blocking=True,
+                phase="base",
+                reason=f"Missing packages: {', '.join(missing_modules)}",
+                powershell=powershell_in_directory(
                     REPO_ROOT, ps_parts, disable_bytecode=True,
                 ),
-                "bash": bash_in_directory(
+                bash=bash_in_directory(
                     REPO_ROOT, bash_parts, disable_bytecode=True,
                 ),
-            }
+            )
         )
 
     for package in installable_repo_packages(report):
@@ -604,88 +932,362 @@ def build_bootstrap_plan(report: dict[str, Any]) -> dict[str, Any]:
             probe, [package.install_target], editable=True,
         )
         steps.append(
-            {
-                "id": f"install_{package.label.lower()}",
-                "label": f"Install repo package {package.label}",
-                "required": True,
-                "reason": f"{package.label} status is {package_state}",
-                "powershell": powershell_in_directory(
+            make_plan_step(
+                step_id=f"install_{package.label.lower()}",
+                label=f"Install repo package {package.label}",
+                blocking=True,
+                phase="base",
+                reason=f"{package.label} status is {package_state}",
+                powershell=powershell_in_directory(
                     package.install_cwd, ps_parts, disable_bytecode=True,
                 ),
-                "bash": bash_in_directory(
+                bash=bash_in_directory(
                     package.install_cwd, bash_parts, disable_bytecode=True,
                 ),
-            }
+            )
         )
+
+    wrds_enabled = report["wrds_mode"]["effective"] == "yes"
+    wrds_username = report["wrds_mode"]["username"]
+    if wrds_enabled and not probe_tool_path(probe, "psql"):
+        commands = psql_install_commands(probe)
+        if commands:
+            steps.append(
+                make_plan_step(
+                    step_id="install_psql",
+                    label="Install PostgreSQL client",
+                    blocking=False,
+                    phase="wrds",
+                    reason="WRDS setup was requested and psql is missing.",
+                    powershell=commands[0],
+                    bash=commands[1],
+                )
+            )
+
+    if wrds_enabled and wrds_files_missing(probe) and wrds_username:
+        wrds_args = [
+            python_path,
+            "tools/bootstrap.py",
+            "wrds-files",
+            "--username",
+            wrds_username,
+            "--password-env",
+            DEFAULT_WRDS_PASSWORD_ENV,
+        ]
+        wrds_bash_args = [
+            bash_python,
+            "tools/bootstrap.py",
+            "wrds-files",
+            "--username",
+            wrds_username,
+            "--password-env",
+            DEFAULT_WRDS_PASSWORD_ENV,
+        ]
+        steps.append(
+            make_plan_step(
+                step_id="create_wrds_files",
+                label="Write WRDS connection files",
+                blocking=False,
+                phase="wrds",
+                reason="WRDS was requested and local pg_service/pgpass files are missing or incomplete.",
+                powershell=powershell_in_directory(REPO_ROOT, wrds_args),
+                bash=bash_in_directory(REPO_ROOT, wrds_bash_args),
+            )
+        )
+
+    if not probe_tool_path(probe, "pdflatex") or not probe_tool_path(probe, "bibtex"):
+        commands = latex_install_commands(probe)
+        if commands:
+            missing_latex_tools = [
+                name
+                for name in ("pdflatex", "bibtex")
+                if not probe_tool_path(probe, name)
+            ]
+            steps.append(
+                make_plan_step(
+                    step_id="install_latex_toolchain",
+                    label="Install LaTeX toolchain",
+                    blocking=False,
+                    phase="writing",
+                    reason=f"Missing LaTeX tools: {', '.join(missing_latex_tools)}",
+                    powershell=commands[0],
+                    bash=commands[1],
+                )
+            )
+
+    if not probe_tool_path(probe, "r"):
+        commands = r_install_commands(probe)
+        if commands:
+            steps.append(
+                make_plan_step(
+                    step_id="install_r",
+                    label="Install R",
+                    blocking=False,
+                    phase="r",
+                    reason="R is not installed.",
+                    powershell=commands[0],
+                    bash=commands[1],
+                )
+            )
 
     needs_apply = bool(steps) or bool(missing_local_files)
     if needs_apply:
+        apply_blocking = bool(missing_local_files) or any(step["blocking"] for step in steps)
         apply_reason = (
             f"Missing local files: {', '.join(missing_local_files)}"
             if missing_local_files
             else "Refresh canonical external local-state files after setup changes"
         )
         steps.append(
-            {
-                "id": "apply_local_files",
-                "label": "Write or refresh local onboarding files",
-                "required": True,
-                "reason": apply_reason,
-                "powershell": powershell_in_directory(
+            make_plan_step(
+                step_id="apply_local_files",
+                label="Write or refresh local onboarding files",
+                blocking=apply_blocking,
+                phase="base",
+                reason=apply_reason,
+                powershell=powershell_in_directory(
                     REPO_ROOT,
-                    [python_path, "tools/bootstrap.py", "apply"],
+                    [python_path, "tools/bootstrap.py", "apply", *runtime_args],
                 ),
-                "bash": bash_in_directory(
+                bash=bash_in_directory(
                     REPO_ROOT,
-                    [bash_python, "tools/bootstrap.py", "apply"],
+                    [bash_python, "tools/bootstrap.py", "apply", *runtime_args],
                 ),
-            }
+            )
         )
         steps.append(
-            {
-                "id": "rerun_audit",
-                "label": "Re-run bootstrap audit",
-                "required": True,
-                "reason": "Verify that the clone is ready after the required setup steps.",
-                "powershell": powershell_in_directory(
+            make_plan_step(
+                step_id="rerun_audit",
+                label="Re-run bootstrap audit",
+                blocking=apply_blocking,
+                phase="base",
+                reason="Verify that the clone is ready after the requested setup steps.",
+                powershell=powershell_in_directory(
                     REPO_ROOT,
-                    [python_path, "tools/bootstrap.py", "audit"],
+                    [python_path, "tools/bootstrap.py", "audit", *runtime_args],
                 ),
-                "bash": bash_in_directory(
+                bash=bash_in_directory(
                     REPO_ROOT,
-                    [bash_python, "tools/bootstrap.py", "audit"],
+                    [bash_python, "tools/bootstrap.py", "audit", *runtime_args],
                 ),
-            }
+            )
         )
 
     return {
         "steps": steps,
-        "required_ids": [step["id"] for step in steps if step["required"]],
+        "required_ids": [step["id"] for step in steps if step["blocking"]],
     }
+
+
+def build_blocking_findings(report: dict[str, Any]) -> list[dict[str, str]]:
+    probe = report["probe"]
+    findings: list[dict[str, str]] = []
+
+    if not python_is_supported(probe["python"]["version"]):
+        findings.append(
+            {
+                "phase": "base",
+                "item": "python",
+                "detail": f"Python {probe['python']['version']} is below the required 3.11 baseline.",
+            }
+        )
+
+    missing_modules = missing_python_modules(probe)
+    if missing_modules:
+        findings.append(
+            {
+                "phase": "base",
+                "item": "python_packages",
+                "detail": f"Missing required Python packages: {', '.join(missing_modules)}",
+            }
+        )
+
+    failing_packages = [item["label"] for item in report["repo_packages"] if item["status"] != "OK"]
+    if failing_packages:
+        findings.append(
+            {
+                "phase": "base",
+                "item": "repo_packages",
+                "detail": f"Repo packages not installed from this checkout: {', '.join(failing_packages)}",
+            }
+        )
+
+    missing_local_files = [item["path"] for item in report["local_files"] if item["status"] != "OK"]
+    if missing_local_files:
+        findings.append(
+            {
+                "phase": "base",
+                "item": "local_state",
+                "detail": f"Canonical local-state files missing: {', '.join(missing_local_files)}",
+            }
+        )
+
+    if not probe_tool_path(probe, "bash"):
+        findings.append(
+            {
+                "phase": "base",
+                "item": "bash",
+                "detail": "Bash is missing; Claude hook automation depends on it.",
+            }
+        )
+
+    if report.get("synced_folder_status") == "FAIL":
+        findings.append(
+            {
+                "phase": "base",
+                "item": "synced_folder_safety",
+                "detail": "Repo-root compatibility shims exist inside a synced folder.",
+            }
+        )
+
+    return findings
+
+
+def build_optional_findings(report: dict[str, Any]) -> list[dict[str, str]]:
+    probe = report["probe"]
+    wrds_enabled = report["wrds_mode"]["effective"] == "yes"
+    findings: list[dict[str, str]] = []
+
+    if not probe_tool_path(probe, "uv"):
+        findings.append(
+            {
+                "phase": "base",
+                "item": "uv",
+                "detail": "uv is not installed; installs will fall back to pip.",
+            }
+        )
+
+    if wrds_enabled:
+        if not probe_tool_path(probe, "psql"):
+            findings.append(
+                {
+                    "phase": "wrds",
+                    "item": "psql",
+                    "detail": "psql is missing.",
+                }
+            )
+        if wrds_files_missing(probe):
+            detail = "WRDS connection files are missing or incomplete."
+            if not report["wrds_mode"]["username"]:
+                detail += " A WRDS username is still required to generate them automatically."
+            findings.append(
+                {
+                    "phase": "wrds",
+                    "item": "wrds_files",
+                    "detail": detail,
+                }
+            )
+        if report["wrds_test"]["status"] == "FAIL":
+            findings.append(
+                {
+                    "phase": "wrds",
+                    "item": "wrds_connection",
+                    "detail": report["wrds_test"]["checks"][-1]["detail"],
+                }
+            )
+
+    missing_writing_tools = [
+        name for name in ("pdflatex", "bibtex") if not probe_tool_path(probe, name)
+    ]
+    if missing_writing_tools:
+        findings.append(
+            {
+                "phase": "writing",
+                "item": "latex",
+                "detail": f"Missing LaTeX tools: {', '.join(missing_writing_tools)}",
+            }
+        )
+
+    if not probe_tool_path(probe, "r"):
+        findings.append(
+            {
+                "phase": "r",
+                "item": "r",
+                "detail": "R is not installed.",
+            }
+        )
+
+    return findings
+
+
+def build_phase_status(report: dict[str, Any]) -> dict[str, dict[str, str]]:
+    probe = report["probe"]
+    wrds_enabled = report["wrds_mode"]["effective"] == "yes"
+    wrds_requested = report["wrds_mode"]["requested"]
+
+    base_status = "ready" if not report["blocking_findings"] else "blocked"
+    base_detail = (
+        "Core repo bootstrap requirements are satisfied."
+        if base_status == "ready"
+        else "; ".join(item["detail"] for item in report["blocking_findings"])
+    )
+
+    if not wrds_enabled:
+        wrds_status = "skipped_no_account" if wrds_requested == "no" else "skipped_not_requested"
+        wrds_detail = report["wrds_mode"]["reason"]
+    else:
+        wrds_files_ok = not wrds_files_missing(probe)
+        if probe_tool_path(probe, "psql") and wrds_files_ok and report["wrds_test"]["status"] == "OK":
+            wrds_status = "ready"
+            wrds_detail = "WRDS credentials and connectivity checks passed."
+        elif report["wrds_test"]["status"] == "FAIL":
+            wrds_status = "failed"
+            wrds_detail = report["wrds_test"]["checks"][-1]["detail"]
+        else:
+            wrds_status = "partial"
+            wrds_detail = "; ".join(
+                finding["detail"]
+                for finding in report["optional_findings"]
+                if finding["phase"] == "wrds"
+            ) or report["wrds_test"].get("reason", "WRDS setup is incomplete.")
+
+    writing_ready = bool(probe_tool_path(probe, "pdflatex") and probe_tool_path(probe, "bibtex"))
+    writing_status = "ready" if writing_ready else "partial"
+    writing_detail = (
+        "pdflatex and bibtex are available."
+        if writing_ready
+        else "Missing one or more LaTeX tools."
+    )
+
+    r_ready = bool(probe_tool_path(probe, "r"))
+    r_status = "ready" if r_ready else "partial"
+    r_detail = "R is available." if r_ready else "R is not installed."
+
+    return {
+        "base_repo": {"status": base_status, "detail": base_detail},
+        "wrds": {"status": wrds_status, "detail": wrds_detail},
+        "writing": {"status": writing_status, "detail": writing_detail},
+        "r": {"status": r_status, "detail": r_detail},
+    }
+
+
+def display_phase_status(status: str) -> str:
+    return {
+        "ready": "READY",
+        "blocked": "BLOCKED",
+        "partial": "PARTIAL",
+        "failed": "FAILED",
+        "skipped_no_account": "SKIPPED (no account)",
+        "skipped_not_requested": "SKIPPED",
+    }.get(status, status.upper())
 
 
 def summary_rows(report: dict[str, Any]) -> list[tuple[str, str]]:
     probe = report["probe"]
-    wrds = report["wrds_test"]
-    repo_ok = all(item["status"] == "OK" for item in report["repo_packages"])
-    wrds_files_ok = preferred_pg_service_path(probe).exists() and probe["wrds"]["pgpass"] == "OK"
-    local_state_ok = all(item["status"] == "OK" for item in report["local_files"])
     compat_status = "PRESENT" if any(item["status"] == "OK" for item in report["compatibility_files"]) else "ABSENT"
     return [
-        ("Python", "OK"),
-        ("uv", "OK" if probe["tools"]["uv"]["path"] else "NOT INSTALLED (optional)"),
-        ("Python packages", "OK" if not missing_python_modules(probe) else "PARTIAL"),
-        ("Repo packages", "OK" if repo_ok else "PARTIAL"),
-        ("Local state", "OK" if local_state_ok else "PARTIAL"),
+        ("Onboarding", "SUCCESS" if report["onboarding_success"] else "BLOCKED"),
+        ("Base repo", display_phase_status(report["phase_status"]["base_repo"]["status"])),
+        ("WRDS", display_phase_status(report["phase_status"]["wrds"]["status"])),
+        ("Writing", display_phase_status(report["phase_status"]["writing"]["status"])),
+        ("R", display_phase_status(report["phase_status"]["r"]["status"])),
+        ("Python", "OK" if python_is_supported(probe["python"]["version"]) else "UPGRADE REQUIRED"),
+        ("uv", "OK" if probe_tool_path(probe, "uv") else "NOT INSTALLED (optional)"),
+        ("Repo packages", "OK" if not any(item["status"] != "OK" for item in report["repo_packages"]) else "PARTIAL"),
+        ("Local state", "OK" if not any(item["status"] != "OK" for item in report["local_files"]) else "PARTIAL"),
         ("Repo shims", compat_status),
         ("Synced-folder safety", report.get("synced_folder_status", "NOT_SYNCED")),
-        ("Bash", "OK" if probe["tools"]["bash"]["path"] else "FAIL"),
-        ("psql", "OK" if probe["tools"]["psql"]["path"] else "NOT INSTALLED (optional)"),
-        ("WRDS files", "OK" if wrds_files_ok else "PARTIAL"),
-        ("WRDS connection", wrds["status"]),
-        ("LaTeX", "OK" if probe["tools"]["pdflatex"]["path"] else "NOT INSTALLED"),
-        ("R", "OK" if probe["tools"]["r"]["path"] else "NOT INSTALLED"),
-        ("SSH key", "OK" if probe["wrds"]["ssh_key"] == "OK" else "NOT CONFIGURED"),
+        ("Bash", "OK" if probe_tool_path(probe, "bash") else "FAIL"),
     ]
 
 
@@ -694,10 +1296,11 @@ def build_actions(report: dict[str, Any]) -> list[str]:
     actions: list[str] = []
     plan_steps = report["bootstrap_plan"]["steps"]
     storage_hint = probe["local_state"]["storage_hint"]
+    wrds_enabled = report["wrds_mode"]["effective"] == "yes"
 
     if plan_steps:
         actions.append(
-            "Execute the required bootstrap plan commands below. In sandboxed agent sessions, run the shell commands directly so approvals can be requested."
+            "Execute the emitted bootstrap plan commands below. In sandboxed agent sessions, run the shell-specific commands directly so approvals can be requested."
         )
 
     if storage_hint["kind"] == "synced_folder_candidate":
@@ -715,37 +1318,43 @@ def build_actions(report: dict[str, Any]) -> list[str]:
         else:
             actions.append("Remove or avoid repo-root compatibility shims unless you explicitly need legacy Claude/Codex compatibility in a private single-user working copy.")
 
-    if not probe["tools"]["uv"]["path"]:
+    if not probe_tool_path(probe, "uv"):
         actions.append(
-            "(Recommended) Install uv for faster package installs. "
-            "Windows: `powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"`. "
-            "macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`. "
-            "Then rerun `tools/bootstrap.py audit`."
+            "(Recommended) Install uv for faster package installs. The bootstrap plan includes an auto-run install step when supported."
         )
 
-    if not probe["tools"]["bash"]["path"]:
-        actions.append("Install or fix Bash on PATH so Claude hook automation can run. On Windows, Git Bash is the expected setup.")
-
-    if not probe["tools"]["psql"]["path"]:
+    if not probe_tool_path(probe, "bash") and not bash_install_commands(probe):
         actions.append(
-            "(Optional \u2013 WRDS only) Install the PostgreSQL client for data extraction. "
-            "Windows: download the zip archive from postgresql.org and extract to ~/tools/pgsql/. "
-            "macOS: `brew install libpq`. "
-            "Do NOT use conda to install psql."
+            "Install or fix Bash on PATH so Claude hook automation can run. On Windows, install Git for Windows / Git Bash manually if winget is unavailable."
         )
 
-    if not preferred_pg_service_path(probe).exists():
-        actions.append("(Optional \u2013 WRDS only) Create or copy `pg_service.conf` into the location used by this machine.")
-    if probe["wrds"]["pgpass"] != "OK":
-        actions.append("(Optional \u2013 WRDS only) Create or repair `.pgpass` with your WRDS credentials.")
+    if not wrds_enabled:
+        actions.append("WRDS setup was skipped because no WRDS account was requested for this onboarding run.")
+    elif not probe_tool_path(probe, "psql") and not psql_install_commands(probe):
+        actions.append(
+            "(Optional – WRDS only) Install the PostgreSQL client manually if no supported package-manager path is available. "
+            "Windows: install PostgreSQL or extract the PostgreSQL zip client into ~/tools/pgsql/. "
+            "macOS: `brew install libpq`. Linux: `apt-get install postgresql-client` or `dnf install postgresql`."
+        )
 
-    if probe["wrds"]["ssh_config"] != "OK":
+    if wrds_enabled and wrds_files_missing(probe) and not report["wrds_mode"]["username"]:
+        actions.append("WRDS setup needs a username before the repo can generate pg_service/pgpass files automatically.")
+
+    if wrds_enabled and probe["wrds"]["ssh_config"] != "OK":
         actions.append("Add an optional `Host wrds` SSH config entry if you need SSH or TAQ workflows.")
-    if probe["wrds"]["ssh_key"] != "OK":
+    if wrds_enabled and probe["wrds"]["ssh_key"] != "OK":
         actions.append("Configure the optional WRDS SSH key if you need SSH or TAQ workflows.")
 
-    if report["wrds_test"]["status"] == "FAIL":
-        actions.append("(Optional \u2013 WRDS only) Fix WRDS credentials or connectivity, then rerun `tools/bootstrap.py audit`.")
+    if wrds_enabled and report["wrds_test"]["status"] == "FAIL":
+        actions.append("(Optional – WRDS only) Fix WRDS credentials or approve the DUO prompt, then rerun `tools/bootstrap.py audit`.")
+
+    if report["phase_status"]["writing"]["status"] != "ready" and not latex_install_commands(probe):
+        actions.append(
+            "(Optional – writing) Install pdflatex and bibtex manually if no supported package-manager path is available."
+        )
+
+    if report["phase_status"]["r"]["status"] != "ready" and not r_install_commands(probe):
+        actions.append("(Optional – R) Install R manually if no supported package-manager path is available.")
 
     if not actions:
         actions.append("No gaps detected. Re-run the bootstrap after major environment changes.")
@@ -764,16 +1373,35 @@ def _synced_folder_audit_status(report: dict[str, Any]) -> str:
     return "FAIL" if has_compat else "OK"
 
 
-def build_report(*, skip_wrds_test: bool) -> dict[str, Any]:
+def build_report(
+    *,
+    skip_wrds_test: bool,
+    requested_wrds: str,
+    wrds_username: str = "",
+) -> dict[str, Any]:
     probe = collect_probe()
+    wrds_mode = resolve_wrds_mode(probe, requested=requested_wrds, wrds_username=wrds_username)
     report = {
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "probe": probe,
+        "options": {
+            "skip_wrds_test": skip_wrds_test,
+        },
+        "wrds_mode": wrds_mode,
         "preferred_pg_service_file": str(preferred_pg_service_path(probe)),
         "repo_packages": repo_package_status(probe),
         "local_files": canonical_local_file_status(probe),
         "compatibility_files": compatibility_file_status(probe),
-        "wrds_test": run_wrds_checks(probe, skip=skip_wrds_test),
+        "wrds_test": run_wrds_checks(
+            probe,
+            skip=skip_wrds_test or wrds_mode["effective"] != "yes",
+        )
+        if wrds_mode["effective"] == "yes"
+        else {
+            "status": "SKIPPED",
+            "reason": wrds_mode["reason"],
+            "checks": [],
+        },
     }
     report["commands"] = {
         "powershell": power_shell_commands(probe),
@@ -781,6 +1409,11 @@ def build_report(*, skip_wrds_test: bool) -> dict[str, Any]:
     }
     report["bootstrap_plan"] = build_bootstrap_plan(report)
     report["synced_folder_status"] = _synced_folder_audit_status(report)
+    report["blocking_findings"] = build_blocking_findings(report)
+    report["optional_findings"] = build_optional_findings(report)
+    report["phase_status"] = build_phase_status(report)
+    report["base_repo_ready"] = report["phase_status"]["base_repo"]["status"] == "ready"
+    report["onboarding_success"] = report["base_repo_ready"]
     report["summary"] = summary_rows(report)
     report["actions"] = build_actions(report)
     return report
@@ -835,6 +1468,7 @@ def render_local_env(report: dict[str, Any], *, compatibility_shim: bool = False
         format_tool_row("bash", probe["tools"]["bash"]["path"], probe["tools"]["bash"]["version"]),
         format_tool_row("psql", probe["tools"]["psql"]["path"], probe["tools"]["psql"]["version"]),
         format_tool_row("pdflatex", probe["tools"]["pdflatex"]["path"], probe["tools"]["pdflatex"]["version"]),
+        format_tool_row("bibtex", probe["tools"]["bibtex"]["path"], probe["tools"]["bibtex"]["version"]),
         format_tool_row("R", probe["tools"]["r"]["path"], probe["tools"]["r"]["version"]),
         format_tool_row("git", probe["tools"]["git"]["path"], probe["tools"]["git"]["version"]),
         format_tool_row("gh", probe["tools"]["gh"]["path"], probe["tools"]["gh"]["version"]),
@@ -869,6 +1503,7 @@ def render_local_env(report: dict[str, Any], *, compatibility_shim: bool = False
             f"- pgpass: {probe['wrds']['pgpass']}",
             f"- SSH config: {probe['wrds']['ssh_config']}",
             f"- SSH key: {probe['wrds']['ssh_key']}",
+            f"- WRDS mode: {report['wrds_mode']['effective']} ({report['wrds_mode']['reason']})",
             f"- Connection test: {report['wrds_test']['status']}",
             "",
             "## Canonical Commands",
@@ -918,57 +1553,6 @@ def render_claude_local(report: dict[str, Any], *, compatibility_shim: bool = Fa
         "- Repo-root compatibility shims are optional and unsafe for shared multi-user synced working trees.",
     ]
     return "\n".join(lines) + "\n"
-
-
-def bash_allow_entries(probe: dict[str, Any]) -> list[str]:  # Retained for reference; no longer called by render_settings_local().
-    def variants(path: str) -> list[str]:
-        items = [path]
-        slash_path = path.replace("\\", "/")
-        if slash_path not in items:
-            items.append(slash_path)
-        msys_path = display_bash_path(path)
-        if msys_path not in items:
-            items.append(msys_path)
-        return items
-
-    entries: list[str] = []
-    for python_path in variants(probe["python"]["path"]):
-        entries.extend(
-            [
-                f"Bash({python_path} *)",
-                f'Bash("{python_path}" *)',
-                f"Bash({python_path} -m pip *)",
-                f'Bash("{python_path}" -m pip *)',
-            ]
-        )
-
-    uv_path = probe["tools"]["uv"]["path"]
-    if uv_path:
-        for candidate in variants(uv_path):
-            entries.extend(
-                [
-                    f"Bash({candidate} pip *)",
-                    f'Bash("{candidate}" pip *)',
-                ]
-            )
-
-    psql_path = probe["tools"]["psql"]["path"]
-    if psql_path:
-        for candidate in variants(psql_path):
-            entries.extend(
-                [
-                    f"Bash({candidate} *)",
-                    f'Bash("{candidate}" *)',
-                    f"Bash(PGSERVICEFILE=* {candidate} service=wrds*)",
-                    f'Bash(PGSERVICEFILE=* "{candidate}" service=wrds*)',
-                ]
-            )
-
-    unique_entries: list[str] = []
-    for entry in entries:
-        if entry not in unique_entries:
-            unique_entries.append(entry)
-    return unique_entries
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -1150,6 +1734,7 @@ def print_report(
     print(f"  bash               {probe['tools']['bash']['path'] or 'MISSING'}")
     print(f"  psql               {probe['tools']['psql']['path'] or 'MISSING'}")
     print(f"  pdflatex           {probe['tools']['pdflatex']['path'] or 'not installed'}")
+    print(f"  bibtex             {probe['tools']['bibtex']['path'] or 'not installed'}")
     print(f"  R                  {probe['tools']['r']['path'] or 'not installed'}")
     print(f"  git                {probe['tools']['git']['path'] or 'MISSING'}")
     print(f"  gh                 {probe['tools']['gh']['path'] or 'not installed'}")
@@ -1184,6 +1769,12 @@ def print_report(
     else:
         print("  storage_hint        local or unknown")
 
+    print_section("Phase Status")
+    print(f"  onboarding         {'SUCCESS' if report['onboarding_success'] else 'BLOCKED'}")
+    for phase_name in ("base_repo", "wrds", "writing", "r"):
+        phase = report["phase_status"][phase_name]
+        print(f"  {phase_name:<18} {display_phase_status(phase['status'])}: {phase['detail']}")
+
     print()
     print("Testing WRDS connectivity...")
     if report["wrds_test"]["status"] == "SKIPPED":
@@ -1200,7 +1791,8 @@ def print_report(
     if report["bootstrap_plan"]["steps"]:
         print_section("Bootstrap Commands")
         for step in report["bootstrap_plan"]["steps"]:
-            print(f"  {step['label']}: {step['reason']}")
+            blocking = "blocking" if step["blocking"] else "optional"
+            print(f"  {step['label']} [{step['phase']}, {blocking}]: {step['reason']}")
             print(f"    PowerShell/native: {step['powershell']}")
             print(f"    Bash:              {step['bash']}")
 
@@ -1247,6 +1839,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             action="store_true",
             help="Emit structured JSON instead of human-readable output.",
         )
+        subparser.add_argument(
+            "--wrds",
+            choices=SUPPORTED_WRDS_MODES,
+            default="auto",
+            help="Whether WRDS setup should be considered part of this onboarding run.",
+        )
+        subparser.add_argument(
+            "--wrds-username",
+            default="",
+            help="Optional WRDS username to thread into bootstrap planning.",
+        )
         if mode == "apply":
             subparser.add_argument(
                 "--write-compat-shims",
@@ -1270,28 +1873,82 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                 help=argparse.SUPPRESS,
             )
 
+    wrds_parser = subparsers.add_parser("wrds-files")
+    wrds_parser.add_argument("--username", required=True, help="WRDS username to write into pg_service.conf / .pgpass")
+    wrds_parser.add_argument(
+        "--password-env",
+        default=DEFAULT_WRDS_PASSWORD_ENV,
+        help="Environment variable holding the WRDS password.",
+    )
+    wrds_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Emit structured JSON instead of human-readable output.",
+    )
+
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
+    if args.mode == "wrds-files":
+        password = os.environ.get(args.password_env, "")
+        if not password:
+            message = (
+                f"Environment variable `{args.password_env}` is required to write WRDS files "
+                "without echoing the password."
+            )
+            if args.json:
+                json.dump({"mode": args.mode, "written_files": [], "error": message}, sys.stdout, indent=2)
+                sys.stdout.write("\n")
+            else:
+                print(message)
+            return 1
+
+        probe = collect_probe()
+        written_files = write_wrds_files(probe, username=args.username, password=password)
+        if args.json:
+            json.dump({"mode": args.mode, "written_files": written_files}, sys.stdout, indent=2)
+            sys.stdout.write("\n")
+        else:
+            print("Wrote WRDS connection files:")
+            for path in written_files:
+                print(f"  {path}")
+        return 0
+
     repair_results: list[dict[str, str]] = []
     written_files: list[str] = []
     cleaned_artifacts: list[str] = []
 
-    report = build_report(skip_wrds_test=args.skip_wrds_test)
+    report = build_report(
+        skip_wrds_test=args.skip_wrds_test,
+        requested_wrds=args.wrds,
+        wrds_username=args.wrds_username,
+    )
 
     if args.mode == "repair":
         repair_results = repair_environment(report)
-        report = build_report(skip_wrds_test=args.skip_wrds_test)
+        report = build_report(
+            skip_wrds_test=args.skip_wrds_test,
+            requested_wrds=args.wrds,
+            wrds_username=args.wrds_username,
+        )
         write_compat_shims = args.write_compat_shims or args.write_local_files
         if args.write_canonical_state or args.write_local_files:
             written_files = write_outputs(report, write_compat_shims=write_compat_shims)
-            report = build_report(skip_wrds_test=args.skip_wrds_test)
+            report = build_report(
+                skip_wrds_test=args.skip_wrds_test,
+                requested_wrds=args.wrds,
+                wrds_username=args.wrds_username,
+            )
     elif args.mode == "apply":
         written_files = write_outputs(report, write_compat_shims=args.write_compat_shims)
-        report = build_report(skip_wrds_test=args.skip_wrds_test)
+        report = build_report(
+            skip_wrds_test=args.skip_wrds_test,
+            requested_wrds=args.wrds,
+            wrds_username=args.wrds_username,
+        )
 
     cleaned_artifacts = cleanup_generated_repo_artifacts()
 
