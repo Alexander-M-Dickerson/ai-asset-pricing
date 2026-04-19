@@ -340,7 +340,8 @@ def _make_minimal_report(*, state_dir: Path, storage_hint: dict) -> dict:
             "installers": {},
             "packages": {
                 "pandas": "2.0.0", "psycopg2": "2.9.0", "pyarrow": "14.0.0",
-                "numpy": "1.26.0", "matplotlib": "3.8.0", "statsmodels": "0.14.0",
+                "numpy": "1.26.0", "matplotlib": "3.8.0", "seaborn": "0.13.0",
+                "statsmodels": "0.14.0", "docx": "1.1.0", "PIL": "10.0.0",
             },
             "wrds": {
                 "wrds_user": "",
