@@ -1924,13 +1924,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         probe = collect_probe()
-        written_files = write_wrds_files(probe, username=args.username, password=password)
+        wrds_written_files = write_wrds_files(probe, username=args.username, password=password)
         if args.json:
-            json.dump({"mode": args.mode, "written_files": written_files}, sys.stdout, indent=2)
+            json.dump({"mode": args.mode, "written_files": wrds_written_files}, sys.stdout, indent=2)
             sys.stdout.write("\n")
         else:
             print("Wrote WRDS connection files:")
-            for path in written_files:
+            for path in wrds_written_files:
                 print(f"  {path}")
         return 0
 
